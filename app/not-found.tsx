@@ -10,10 +10,10 @@ export default function NotFound() {
           That page does not exist, or you do not have access to it.
         </p>
         <Link
-          href="/search"
+          href="/builder"
           className="mt-5 inline-block rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white hover:bg-brand-700"
         >
-          Back to search
+          Back to Lead Builder
         </Link>
       </div>
     </div>

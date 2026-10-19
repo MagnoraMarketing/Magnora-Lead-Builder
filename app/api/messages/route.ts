@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
     if (query.leadId) q = q.eq('lead_id', query.leadId);
 
     const { data, error, count } = await q
-      .order('updated_at', { ascending: false })
+      .order(query.sort === 'created' ? 'created_at' : 'updated_at', { ascending: false })
       .range(from, to)
       .returns<OutreachMessageWithLead[]>();
 

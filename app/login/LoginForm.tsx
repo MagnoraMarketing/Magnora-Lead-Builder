@@ -11,7 +11,7 @@ type Mode = 'signin' | 'signup';
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const nextPath = searchParams.get('next') ?? '/search';
+  const nextPath = searchParams.get('next') ?? '/builder';
 
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');

@@ -243,6 +243,8 @@ export const messageListQuerySchema = z.object({
   status: z.enum(MESSAGE_STATUSES).optional(),
   campaignId: z.string().uuid().optional(),
   leadId: z.string().uuid().optional(),
+  /** `created` lists newest first by creation, as the Lead Builder table does. */
+  sort: z.enum(['updated', 'created']).default('updated'),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(25),
 });
@@ -256,3 +258,46 @@ export const importLeadsSchema = z.object({
   csv: z.string().min(1, 'The file is empty').max(2_000_000, 'The file is larger than 2 MB'),
   campaignId: z.string().uuid().nullable().optional(),
 });
+
+// ---------------------------------------------------------------------------
+//  AI Lead Builder (the one-page flow: lead form → generate → review → save)
+// ---------------------------------------------------------------------------
+
+/** Treats a blank optional input as "not given" rather than as an invalid value. */
+const blankToUndefined = (value: unknown) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
+const builderLeadFields = {
+  name: z.string().trim().min(1, 'Name is required').max(200, 'Name is too long'),
+  role: z.string().trim().min(1, 'Role is required').max(200, 'Role is too long'),
+  company: z.string().trim().min(1, 'Company is required').max(200, 'Company is too long'),
+  linkedinUrl: z.preprocess(
+    blankToUndefined,
+    z.string().trim().url('Must be a valid URL').max(500).optional(),
+  ),
+  campaignId: z.string().uuid().nullable().optional(),
+  channel: messageChannel.default('connection_request'),
+};
+
+/** POST /api/generate-message — drafts text for a lead that is not saved yet. */
+export const builderGenerateSchema = z.object({
+  ...builderLeadFields,
+  instructions: z.preprocess(
+    blankToUndefined,
+    z.string().trim().max(500, 'Keep instructions under 500 characters').optional(),
+  ),
+});
+
+export type BuilderGenerateInput = z.infer<typeof builderGenerateSchema>;
+
+/** POST /api/builder — saves the lead and its reviewed message together, as a draft. */
+export const builderSaveSchema = z
+  .object({
+    ...builderLeadFields,
+    body: messageBody,
+    source: z.enum(['ai', 'manual']),
+    aiModel: z.string().trim().max(100).optional(),
+  })
+  .refine(fitsChannel, connectionNoteTooLong);
+
+export type BuilderSaveInput = z.infer<typeof builderSaveSchema>;
