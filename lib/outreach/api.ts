@@ -22,6 +22,7 @@ export const AI_ERROR_STATUS: Record<AiErrorCode, number> = {
   ai_unavailable: 502,
   ai_refused: 422,
   ai_invalid_output: 502,
+  ai_request_rejected: 502,
 };
 
 export function aiNotConfigured() {

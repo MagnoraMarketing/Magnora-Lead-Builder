@@ -36,7 +36,8 @@ export type AiErrorCode =
   | 'ai_rate_limited'
   | 'ai_unavailable'
   | 'ai_refused'
-  | 'ai_invalid_output';
+  | 'ai_invalid_output'
+  | 'ai_request_rejected';
 
 export class AiGenerationError extends Error {
   constructor(
@@ -140,10 +141,22 @@ function parseJson(text: string): unknown {
 /** Maps SDK errors to stable codes. Details go to the server log, not the client. */
 function toAiError(error: unknown): AiGenerationError {
   console.error('[ai:outreach] request failed', error);
-  if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
+  if (
+    error instanceof Anthropic.AuthenticationError ||
+    error instanceof Anthropic.PermissionDeniedError
+  ) {
     return new AiGenerationError(
       'ai_auth_failed',
       'The AI provider rejected the server’s API key. Check ANTHROPIC_API_KEY.',
+    );
+  }
+  if (error instanceof Anthropic.BadRequestError) {
+    // A 400 here is an account-level problem — most often an empty credit
+    // balance — not something the user typed. Anthropic's own message says
+    // which, and carries no secrets, so it is passed on.
+    return new AiGenerationError(
+      'ai_request_rejected',
+      `The AI provider rejected the request: ${providerMessage(error)}`,
     );
   }
   if (error instanceof Anthropic.RateLimitError) {
@@ -156,4 +169,10 @@ function toAiError(error: unknown): AiGenerationError {
     'ai_unavailable',
     'The AI provider could not be reached. Try again shortly.',
   );
+}
+
+function providerMessage(error: InstanceType<typeof Anthropic.APIError>): string {
+  const body = error.error as { error?: { message?: unknown } } | undefined;
+  const message = body?.error?.message;
+  return typeof message === 'string' && message.trim() ? message.trim() : 'no reason given.';
 }

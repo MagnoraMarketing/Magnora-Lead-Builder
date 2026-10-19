@@ -24,9 +24,10 @@ const input: OutreachPromptInput = {
   channel: 'connection_request',
 };
 
-function apiResponse(text: string, stop_reason = 'end_turn', status = 200) {
-  const body =
-    status === 200
+function apiResponse(text: string, stop_reason = 'end_turn', status = 200, errorBody?: object) {
+  const body = errorBody
+    ? errorBody
+    : status === 200
       ? {
           id: 'msg_test',
           type: 'message',
@@ -125,6 +126,24 @@ describe('generateOutreachMessage', () => {
     const error = await generateOutreachMessage(input).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(AiGenerationError);
     expect((error as AiGenerationError).code).toBe('ai_auth_failed');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes on the reason when the account is rejected, e.g. no credit', async () => {
+    fetchMock.mockResolvedValue(
+      apiResponse('', 'end_turn', 400, {
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          message: 'Your credit balance is too low to access the Anthropic API.',
+        },
+      }),
+    );
+    const error = (await generateOutreachMessage(input).catch(
+      (e: unknown) => e,
+    )) as AiGenerationError;
+    expect(error.code).toBe('ai_request_rejected');
+    expect(error.message).toContain('credit balance is too low');
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
