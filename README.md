@@ -609,6 +609,26 @@ Nothing else changes.
 
 ## 13a. Campaigns and AI outreach
 
+### The AI Lead Builder page (`/builder`)
+
+The page you land on after signing in, and the quickest way through the whole
+flow:
+
+1. **Lead form** — name, role and company (required), LinkedIn URL (optional),
+   plus an optional campaign, message type and one line of extra guidance.
+2. **Generate message** — `POST /api/generate-message` drafts the text with
+   Claude on the server and returns it. Nothing is saved yet.
+3. **Review and edit** the text, or choose "Write it myself".
+4. **Save lead & message** — `POST /api/builder` stores both in Supabase; the
+   message starts as a **Draft**. If the lead already exists (same LinkedIn URL,
+   or same name at the same company), the draft is added to that lead.
+5. **Table below** — newest first, with the status (**Draft → Approved →
+   Sent**), a button for the next step, and an expandable preview where the
+   text can be edited, copied or archived.
+
+The longer routes below — campaigns, the per-lead outreach panel and the
+`/messages` queue — use the same messages and the same rules.
+
 **Campaigns** (`/campaigns`) group leads and hold the context the AI writes
 from: your name and company, what you offer, the next step you want, tone
 (professional, friendly, direct) and language (Danish or English). Assign leads

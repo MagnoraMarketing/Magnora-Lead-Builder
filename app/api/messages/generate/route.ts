@@ -1,5 +1,5 @@
 import type { NextRequest } from 'next/server';
-import { AiGenerationError, generateOutreachMessage, type AiErrorCode } from '@/lib/ai/outreach';
+import { AiGenerationError, generateOutreachMessage } from '@/lib/ai/outreach';
 import { getAuthedContext } from '@/lib/api/auth';
 import { RATE_LIMITS, checkRateLimit } from '@/lib/api/rate-limit';
 import {
@@ -12,18 +12,9 @@ import {
   validationError,
 } from '@/lib/api/response';
 import { isAiConfigured } from '@/lib/env';
-import { doNotContact } from '@/lib/outreach/api';
+import { AI_ERROR_STATUS, aiNotConfigured, doNotContact } from '@/lib/outreach/api';
 import { generateMessageSchema } from '@/lib/validation/schemas';
 import type { Campaign, Lead, OutreachMessage } from '@/types/database';
-
-const AI_ERROR_STATUS: Record<AiErrorCode, number> = {
-  ai_not_configured: 503,
-  ai_auth_failed: 502,
-  ai_rate_limited: 503,
-  ai_unavailable: 502,
-  ai_refused: 422,
-  ai_invalid_output: 502,
-};
 
 /**
  * POST /api/messages/generate — drafts a LinkedIn message with AI and saves it
@@ -40,13 +31,7 @@ export async function POST(request: NextRequest) {
 
     // Checked before the rate limiter so an unconfigured deployment does not
     // burn the user's quota on requests that cannot succeed.
-    if (!isAiConfigured()) {
-      return fail(
-        'ai_not_configured',
-        'AI drafting is not set up on this deployment. Add ANTHROPIC_API_KEY to the server environment.',
-        503,
-      );
-    }
+    if (!isAiConfigured()) return aiNotConfigured();
 
     if (!(await checkRateLimit(user.id, RATE_LIMITS.generateMessage))) return rateLimited();
 

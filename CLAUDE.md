@@ -106,7 +106,7 @@ reappeared after deletion before.
 ## Verifying a change
 
 ```bash
-npm run lint && npm run typecheck && npx vitest run   # 136 tests
+npm run lint && npm run typecheck && npx vitest run   # 146 tests
 ./scripts/test-db.sh                                  # SQL suites (needs local Postgres 15+)
 cd worker && python -m pytest -q                      # 57 tests
 ```

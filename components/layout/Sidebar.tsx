@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import { cx } from '@/components/ui';
 
 const NAV = [
+  { href: '/builder', label: 'Lead Builder', icon: SparkIcon },
   { href: '/search', label: 'Search', icon: SearchIcon },
   { href: '/dashboard', label: 'Dashboard', icon: GridIcon },
   { href: '/leads', label: 'Leads', icon: UsersIcon },
@@ -45,6 +46,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         );
       })}
     </nav>
+  );
+}
+
+function SparkIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M10 2l1.8 4.7L16.5 8.5l-4.7 1.8L10 15l-1.8-4.7L3.5 8.5l4.7-1.8L10 2zm6 10l.9 2.1L19 15l-2.1.9L16 18l-.9-2.1L13 15l2.1-.9L16 12z" />
+    </svg>
   );
 }
 

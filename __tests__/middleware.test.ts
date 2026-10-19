@@ -67,7 +67,7 @@ describe('unauthenticated API requests', () => {
 });
 
 describe('unauthenticated page requests', () => {
-  const protectedPages = ['/', '/dashboard', '/leads', '/jobs', '/search', '/settings'];
+  const protectedPages = ['/', '/builder', '/dashboard', '/leads', '/jobs', '/search', '/settings'];
 
   it('redirect to /login carrying the intended destination', async () => {
     for (const path of protectedPages) {
@@ -104,7 +104,7 @@ describe('authenticated requests', () => {
   it('are bounced off /login to the search page', async () => {
     const response = await updateSession(request('/login'));
     expect(response.status).toBe(307);
-    expect(new URL(response.headers.get('location') as string).pathname).toBe('/search');
+    expect(new URL(response.headers.get('location') as string).pathname).toBe('/builder');
   });
 });
 

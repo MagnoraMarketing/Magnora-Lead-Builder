@@ -23,6 +23,8 @@ const recorded: RecordedQuery[] = [];
 let tableRows: Record<string, unknown[]> = {};
 let rpcCalls: { fn: string; args: unknown }[] = [];
 let rpcResult: unknown = [];
+/** Error returned by the next insert into a table, e.g. a unique violation. */
+let insertErrors: Record<string, { code: string } | undefined> = {};
 
 function builder(table: string, operation: string, payload?: unknown) {
   const record: RecordedQuery = { table, operation, filters: {}, payload };
@@ -43,11 +45,22 @@ function builder(table: string, operation: string, payload?: unknown) {
       record.filters[column] = value;
       return b;
     },
+    filter(column: string, _op: string, value: unknown) {
+      record.filters[column] = value;
+      return b;
+    },
     order: () => b,
     range: () => b,
     returns: () => b,
     select: () => b,
-    single: async () => ({ data: result(), error: null }),
+    single: async () => {
+      const error = operation === 'insert' ? insertErrors[table] : undefined;
+      if (error) {
+        insertErrors[table] = undefined;
+        return { data: null, error };
+      }
+      return { data: result(), error: null };
+    },
     maybeSingle: async () => ({ data: result(), error: null }),
     then(resolve: (value: unknown) => unknown) {
       return Promise.resolve({ data: rows(), error: null, count: rows().length }).then(resolve);
@@ -98,6 +111,8 @@ const { GET: listMessages, POST: createMessage } = await import('@/app/api/messa
 const { POST: generateMessage } = await import('@/app/api/messages/generate/route');
 const { PATCH: patchMessage, DELETE: deleteMessage } = await import('@/app/api/messages/[id]/route');
 const { POST: importLeads } = await import('@/app/api/leads/import/route');
+const { POST: builderGenerate } = await import('@/app/api/generate-message/route');
+const { POST: builderSave } = await import('@/app/api/builder/route');
 const { AiGenerationError } = await import('@/lib/ai/outreach');
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
@@ -142,6 +157,7 @@ beforeEach(() => {
   recorded.length = 0;
   rpcCalls = [];
   rpcResult = [];
+  insertErrors = {};
   tableRows = { leads: [], campaigns: [], outreach_messages: [] };
   generateMock.mockReset();
   process.env.ANTHROPIC_API_KEY = 'test-key';
@@ -149,6 +165,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
+  vi.restoreAllMocks();
 });
 
 describe('authentication', () => {
@@ -164,6 +181,8 @@ describe('authentication', () => {
       patchMessage(json('http://localhost', { action: 'approve' }, 'PATCH'), params(MESSAGE_ID)),
       deleteMessage(new Request('http://localhost'), params(MESSAGE_ID)),
       importLeads(json('http://localhost', { csv: 'Name\nJens' })),
+      builderGenerate(json('http://localhost', {})),
+      builderSave(json('http://localhost', {})),
     ]);
     for (const response of responses) {
       expect(response.status).toBe(401);
@@ -346,5 +365,148 @@ describe('CSV import', () => {
     expect(response.status).toBe(422);
     expect((await response.json()).error.code).toBe('invalid_file');
     expect(rpcCalls).toHaveLength(0);
+  });
+});
+
+describe('AI Lead Builder', () => {
+  const form = { name: 'Mette Sørensen', role: 'CFO', company: 'Nordlys A/S', linkedinUrl: '' };
+
+  it('generates a message from the form without saving anything', async () => {
+    signIn();
+    generateMock.mockResolvedValue({ body: 'Hej Mette, lad os forbinde.', model: 'claude-test' });
+
+    const response = await builderGenerate(json('http://localhost', form));
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toEqual({
+      message: 'Hej Mette, lad os forbinde.',
+      model: 'claude-test',
+    });
+
+    const [input] = generateMock.mock.calls[0] as [{ lead: Record<string, unknown> }];
+    expect(input.lead).toMatchObject({
+      full_name: 'Mette Sørensen',
+      first_name: 'Mette',
+      job_title: 'CFO',
+      company_name: 'Nordlys A/S',
+    });
+    expect(recorded.some((q) => q.operation === 'insert')).toBe(false);
+  });
+
+  it('requires name, role and company', async () => {
+    signIn();
+    const response = await builderGenerate(json('http://localhost', { name: 'Mette' }));
+    expect(response.status).toBe(422);
+    expect(Object.keys((await response.json()).error.fields)).toEqual(
+      expect.arrayContaining(['role', 'company']),
+    );
+    expect(generateMock).not.toHaveBeenCalled();
+  });
+
+  it('answers ai_not_configured when the key is missing', async () => {
+    signIn();
+    delete process.env.ANTHROPIC_API_KEY;
+    const response = await builderGenerate(json('http://localhost', form));
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe('ai_not_configured');
+  });
+
+  it('saves the lead and its message as a draft, owned by the caller', async () => {
+    signIn();
+    tableRows.leads = [lead()];
+    const response = await builderSave(
+      json('http://localhost', {
+        ...form,
+        linkedinUrl: 'https://www.linkedin.com/in/mette',
+        body: 'Hej Mette',
+        source: 'ai',
+        aiModel: 'claude-test',
+        user_id: 'someone-else',
+      }),
+    );
+    expect(response.status).toBe(201);
+    expect((await response.json()).data.existingLead).toBe(false);
+
+    const leadInsert = recorded.find((q) => q.table === 'leads' && q.operation === 'insert');
+    expect(leadInsert?.payload).toMatchObject({
+      user_id: USER_ID,
+      full_name: 'Mette Sørensen',
+      first_name: 'Mette',
+      last_name: 'Sørensen',
+      job_title: 'CFO',
+      company_name: 'Nordlys A/S',
+      linkedin_url: 'https://www.linkedin.com/in/mette',
+      source: 'builder',
+    });
+    const messageInsert = recorded.find(
+      (q) => q.table === 'outreach_messages' && q.operation === 'insert',
+    );
+    expect(messageInsert?.payload).toMatchObject({
+      user_id: USER_ID,
+      lead_id: LEAD_ID,
+      body: 'Hej Mette',
+      source: 'ai',
+      ai_model: 'claude-test',
+    });
+    expect(messageInsert?.payload).not.toHaveProperty('status');
+  });
+
+  it('adds the message to an existing lead instead of duplicating it', async () => {
+    signIn();
+    tableRows.leads = [lead()];
+    insertErrors.leads = { code: '23505' };
+
+    const response = await builderSave(
+      json('http://localhost', { ...form, body: 'Hej igen', source: 'manual' }),
+    );
+    expect(response.status).toBe(201);
+    expect((await response.json()).data.existingLead).toBe(true);
+
+    const lookup = recorded.find((q) => q.table === 'leads' && q.operation === 'select');
+    expect(lookup?.filters).toMatchObject({
+      user_id: USER_ID,
+      name_company_key: 'mette sorensen|nordlys as',
+    });
+    expect(recorded.some((q) => q.table === 'outreach_messages' && q.operation === 'insert')).toBe(
+      true,
+    );
+  });
+
+  it('refuses to add a message to an existing do-not-contact lead', async () => {
+    signIn();
+    tableRows.leads = [lead({ status: 'do_not_contact' })];
+    insertErrors.leads = { code: '23505' };
+    const response = await builderSave(
+      json('http://localhost', { ...form, body: 'Hej', source: 'manual' }),
+    );
+    expect(response.status).toBe(409);
+    expect(recorded.some((q) => q.table === 'outreach_messages')).toBe(false);
+  });
+
+  it('removes the new lead again if its message cannot be saved', async () => {
+    signIn();
+    tableRows.leads = [lead()];
+    insertErrors.outreach_messages = { code: 'XX000' };
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const response = await builderSave(
+      json('http://localhost', { ...form, body: 'Hej', source: 'manual' }),
+    );
+    expect(response.status).toBe(500);
+    const cleanup = recorded.find((q) => q.table === 'leads' && q.operation === 'delete');
+    expect(cleanup?.filters).toEqual({ id: LEAD_ID, user_id: USER_ID });
+  });
+
+  it('enforces the connection-note limit when saving', async () => {
+    signIn();
+    const response = await builderSave(
+      json('http://localhost', {
+        ...form,
+        channel: 'connection_request',
+        body: 'a'.repeat(301),
+        source: 'manual',
+      }),
+    );
+    expect(response.status).toBe(422);
+    expect(recorded).toHaveLength(0);
   });
 });
