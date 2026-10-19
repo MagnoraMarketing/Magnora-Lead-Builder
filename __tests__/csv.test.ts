@@ -29,6 +29,11 @@ function makeLead(overrides: Partial<Lead> = {}): Lead {
     campaign_id: null,
     enrichment_status: null,
     enriched_at: null,
+    cvr_number: null,
+    cvr_person_id: null,
+    company_address: null,
+    company_phone: null,
+    company_email: null,
     created_at: '2026-01-15T10:00:00Z',
     updated_at: '2026-01-15T10:00:00Z',
     ...overrides,
@@ -82,6 +87,10 @@ describe('leadsToCsv', () => {
       'Mobile',
       'Status',
       'Notes',
+      'CVR',
+      'Company Address',
+      'Company Phone',
+      'Company Email',
     ]);
   });
 

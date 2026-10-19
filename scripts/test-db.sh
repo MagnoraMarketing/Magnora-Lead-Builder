@@ -53,7 +53,7 @@ done
 
 # Assertion suites, in order: outreach_test.sql builds on the users and leads
 # that schema_test.sql creates.
-for suite in schema_test.sql outreach_test.sql followup_test.sql; do
+for suite in schema_test.sql outreach_test.sql followup_test.sql cvr_test.sql; do
   echo "==> running $suite"
   # Print the output even when psql stops on an error, so the cause is visible.
   if ! OUTPUT="$(psql -v ON_ERROR_STOP=1 -d "$DB" -f "$ROOT/supabase/tests/$suite" 2>&1)"; then

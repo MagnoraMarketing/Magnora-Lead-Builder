@@ -138,3 +138,28 @@ export function enrichmentEnv(): {
     bypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET || null,
   };
 }
+
+/**
+ * The Danish company register (CVR), system-to-system access. Server-only.
+ *
+ * Free, but personal: request credentials from Erhvervsstyrelsen
+ * (cvrselvbetjening@erst.dk). CVR_ENDPOINT only needs setting if the register
+ * moves its search URL.
+ */
+export const DEFAULT_CVR_ENDPOINT = 'http://distribution.virk.dk/cvr-permanent/virksomhed/_search';
+
+export function cvrEnv(): { username: string | null; password: string | null; endpoint: string } {
+  if (typeof window !== 'undefined') {
+    throw new Error('cvrEnv() must never be called in the browser.');
+  }
+  return {
+    username: process.env.CVR_USERNAME || null,
+    password: process.env.CVR_PASSWORD || null,
+    endpoint: process.env.CVR_ENDPOINT || DEFAULT_CVR_ENDPOINT,
+  };
+}
+
+export function isCvrConfigured(): boolean {
+  const env = cvrEnv();
+  return Boolean(env.username && env.password);
+}

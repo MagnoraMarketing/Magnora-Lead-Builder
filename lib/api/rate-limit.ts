@@ -21,6 +21,10 @@ export const RATE_LIMITS = {
   importLeads: { bucket: 'import_leads', limit: 10, windowSeconds: 60 * 60 },
   // Each lookup spends the user's credits with the enrichment provider.
   enrichLead: { bucket: 'enrich_lead', limit: 60, windowSeconds: 60 * 60 },
+  // CVR is free, but it is a shared public service; keep usage polite.
+  cvrSearch: { bucket: 'cvr_search', limit: 120, windowSeconds: 60 * 60 },
+  cvrImport: { bucket: 'cvr_import', limit: 30, windowSeconds: 60 * 60 },
+  cvrEnrich: { bucket: 'cvr_enrich', limit: 200, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

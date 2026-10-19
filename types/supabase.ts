@@ -57,6 +57,11 @@ type LeadRow = {
   campaign_id: string | null;
   enrichment_status: 'pending' | 'found' | 'not_found' | 'failed' | null;
   enriched_at: string | null;
+  cvr_number: string | null;
+  cvr_person_id: string | null;
+  company_address: string | null;
+  company_phone: string | null;
+  company_email: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -325,6 +330,10 @@ export type Database = {
         }[];
       };
       import_leads: {
+        Args: { p_rows: Json; p_campaign_id?: string | null };
+        Returns: { inserted: number; skipped: number }[];
+      };
+      import_cvr_leads: {
         Args: { p_rows: Json; p_campaign_id?: string | null };
         Returns: { inserted: number; skipped: number }[];
       };
