@@ -45,14 +45,14 @@ echo.
 >> .env.local echo # and API Keys for the two keys below.
 >> .env.local echo.
 >> .env.local echo NEXT_PUBLIC_SUPABASE_URL=
->> .env.local echo NEXT_PUBLIC_SUPABASE_ANON_KEY=
+>> .env.local echo NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 >> .env.local echo SUPABASE_SERVICE_ROLE_KEY=
 
 echo  Opening it in Notepad. Fill in the three values, save, close Notepad,
 echo  then run this file again.
 echo.
 echo  These are the same three values your Vercel project uses. Note that the
-echo  app needs the anon key as well, which the scraper worker does not.
+echo  app needs the publishable key as well, which the scraper worker does not.
 echo.
 notepad .env.local
 goto END

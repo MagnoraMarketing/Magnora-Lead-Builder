@@ -20,8 +20,10 @@ export const dynamic = 'force-dynamic';
 
 const WHERE_TO_FIND: Record<RequiredSupabaseEnv, string> = {
   NEXT_PUBLIC_SUPABASE_URL: 'Project Settings → Data API → Project URL',
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'Project Settings → API Keys → anon public',
-  SUPABASE_SERVICE_ROLE_KEY: 'Project Settings → API Keys → service_role',
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY:
+    'Project Settings → API Keys → publishable key (the legacy NEXT_PUBLIC_SUPABASE_ANON_KEY also works)',
+  SUPABASE_SERVICE_ROLE_KEY:
+    'Project Settings → API Keys → secret key (sb_secret_…), or the legacy service_role key',
 };
 
 /**

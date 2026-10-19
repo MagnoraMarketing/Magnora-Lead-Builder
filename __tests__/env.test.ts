@@ -10,7 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const ALL = {
   NEXT_PUBLIC_SUPABASE_URL: 'https://example.supabase.co',
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: 'anon-key',
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_key',
+  NEXT_PUBLIC_SUPABASE_ANON_KEY: '',
   SUPABASE_SERVICE_ROLE_KEY: 'service-key',
 } as const;
 
@@ -44,7 +45,7 @@ describe('missingSupabaseEnv', () => {
   it('reports the service role key when only it is absent', async () => {
     const { missingSupabaseEnv, isSupabaseConfigured } = await loadEnv({
       NEXT_PUBLIC_SUPABASE_URL: ALL.NEXT_PUBLIC_SUPABASE_URL,
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ALL.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ALL.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
     });
     expect(missingSupabaseEnv()).toEqual(['SUPABASE_SERVICE_ROLE_KEY']);
     expect(isSupabaseConfigured()).toBe(false);
@@ -54,9 +55,24 @@ describe('missingSupabaseEnv', () => {
     const { missingSupabaseEnv } = await loadEnv({});
     expect(missingSupabaseEnv()).toEqual([
       'NEXT_PUBLIC_SUPABASE_URL',
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+      'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
       'SUPABASE_SERVICE_ROLE_KEY',
     ]);
+  });
+
+  it('accepts the legacy anon key name in place of the publishable key', async () => {
+    const { missingSupabaseEnv, publicEnv } = await loadEnv({
+      NEXT_PUBLIC_SUPABASE_URL: ALL.NEXT_PUBLIC_SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: 'legacy-anon-key',
+      SUPABASE_SERVICE_ROLE_KEY: ALL.SUPABASE_SERVICE_ROLE_KEY,
+    });
+    expect(missingSupabaseEnv()).toEqual([]);
+    expect(publicEnv.supabaseAnonKey).toBe('legacy-anon-key');
+  });
+
+  it('prefers the publishable key when both names are set', async () => {
+    const { publicEnv } = await loadEnv({ ...ALL, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'legacy-anon-key' });
+    expect(publicEnv.supabaseAnonKey).toBe('sb_publishable_key');
   });
 
   it('treats an empty string as missing, not as a value', async () => {

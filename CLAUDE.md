@@ -10,9 +10,13 @@ Read this before recommending a host, an integration, or a Supabase project.
 
 ## Supabase project
 
-**Not created yet.** This repository (Magnora Lead Builder) gets a new
-Supabase account and project; the owner is setting it up. Until then, do not
-connect to, read from or migrate any Supabase project for this app.
+**`pnvofygshswcmgqmgvbw`** — a new account and project created for this
+repository (Magnora Lead Builder).
+
+- Project URL: `https://pnvofygshswcmgqmgvbw.supabase.co`
+- It issues the new key types: `sb_publishable_…` (browser, in
+  `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`) and `sb_secret_…` (server, in
+  `SUPABASE_SERVICE_ROLE_KEY`).
 
 - `mjncziwoqpqhljcoevoe` is the project of the source repository
   (`linkedin-scraper-best`), not this one.
@@ -20,10 +24,9 @@ connect to, read from or migrate any Supabase project for this app.
   `jrnivwqlvmoniwarpjlr`, an unrelated AI-booking project with its own `leads`
   table. Never apply these migrations there.
 
-**Schema status:** nothing applied. On the new project run all five files in
+**Schema status:** nothing applied yet. On the new project run all five files in
 `supabase/migrations/` from scratch, preferably with `supabase db push`, so the
-ledger is recorded and `repair-migration-ledger.sql` is never needed. Record
-the new project ref here once it exists.
+ledger is recorded and `repair-migration-ledger.sql` is never needed.
 
 ---
 
@@ -80,7 +83,7 @@ Two places, and only two:
 
 | Where | What |
 |---|---|
-| Vercel → this app's project (to be created) → Environment Variables | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` (optional: `OUTREACH_AI_MODEL`) |
+| Vercel → project `magnoraleadbuilder` → Environment Variables | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` (optional: `OUTREACH_AI_MODEL`) |
 | `worker/.env` on the operator's PC | `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LINKEDIN_EMAIL`, `LINKEDIN_PASSWORD` |
 
 LinkedIn credentials never go on Vercel — nothing there reads them. The

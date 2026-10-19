@@ -26,7 +26,9 @@ vi.mock('@/lib/env', () => ({
       supabaseUrl: missingEnv.includes('NEXT_PUBLIC_SUPABASE_URL')
         ? ''
         : 'https://example.supabase.co',
-      supabaseAnonKey: missingEnv.includes('NEXT_PUBLIC_SUPABASE_ANON_KEY') ? '' : 'anon-key',
+      supabaseAnonKey: missingEnv.includes('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY')
+        ? ''
+        : 'anon-key',
     };
   },
   isSupabaseConfigured: () => missingEnv.length === 0,
@@ -110,7 +112,7 @@ describe('when Supabase is not configured', () => {
   beforeEach(() => {
     missingEnv = [
       'NEXT_PUBLIC_SUPABASE_URL',
-      'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+      'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
       'SUPABASE_SERVICE_ROLE_KEY',
     ];
   });

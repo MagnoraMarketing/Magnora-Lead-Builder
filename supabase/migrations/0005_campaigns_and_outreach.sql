@@ -134,6 +134,7 @@ create index outreach_messages_campaign_idx on outreach_messages (user_id, campa
 create or replace function outreach_messages_guard()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if tg_op = 'INSERT' then
@@ -207,6 +208,7 @@ create trigger outreach_messages_set_updated_at
 create or replace function outreach_messages_mark_lead_contacted()
 returns trigger
 language plpgsql
+set search_path = public
 as $$
 begin
   if new.status = 'sent' and old.status <> 'sent' then
@@ -262,6 +264,7 @@ returns table (
 )
 language sql
 stable
+set search_path = public
 as $$
   select
     (select count(*) from outreach_messages where user_id = auth.uid() and status = 'draft'),
@@ -284,6 +287,7 @@ returns table (
 )
 language sql
 stable
+set search_path = public
 as $$
   select
     c.id,
@@ -314,6 +318,7 @@ $$;
 create or replace function import_leads(p_rows jsonb, p_campaign_id uuid default null)
 returns table (inserted integer, skipped integer)
 language plpgsql
+set search_path = public
 as $$
 declare
   v_user     uuid := auth.uid();

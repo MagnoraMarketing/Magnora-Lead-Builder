@@ -15,15 +15,24 @@ function required(name: string, value: string | undefined): string {
   return value;
 }
 
+/**
+ * The browser key. Supabase now issues a publishable key (`sb_publishable_…`)
+ * in place of the legacy anon JWT; both play the same role, so either name is
+ * accepted and the publishable key wins when both are set. Each is referenced
+ * literally so Next.js can inline it into the client bundle.
+ */
 export const publicEnv = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
-  supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+  supabaseAnonKey:
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+    '',
 };
 
 export function requirePublicEnv() {
   return {
     supabaseUrl: required('NEXT_PUBLIC_SUPABASE_URL', publicEnv.supabaseUrl),
-    supabaseAnonKey: required('NEXT_PUBLIC_SUPABASE_ANON_KEY', publicEnv.supabaseAnonKey),
+    supabaseAnonKey: required('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', publicEnv.supabaseAnonKey),
   };
 }
 
@@ -49,7 +58,7 @@ export function serverEnv() {
  */
 export const REQUIRED_SUPABASE_ENV = [
   'NEXT_PUBLIC_SUPABASE_URL',
-  'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+  'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
   'SUPABASE_SERVICE_ROLE_KEY',
 ] as const;
 
@@ -69,7 +78,8 @@ export function missingSupabaseEnv(): RequiredSupabaseEnv[] {
   }
   const values: Record<RequiredSupabaseEnv, string | undefined> = {
     NEXT_PUBLIC_SUPABASE_URL: publicEnv.supabaseUrl,
-    NEXT_PUBLIC_SUPABASE_ANON_KEY: publicEnv.supabaseAnonKey,
+    // Satisfied by the legacy NEXT_PUBLIC_SUPABASE_ANON_KEY too; see publicEnv.
+    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: publicEnv.supabaseAnonKey,
     SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   };
   return REQUIRED_SUPABASE_ENV.filter((name) => !values[name]);

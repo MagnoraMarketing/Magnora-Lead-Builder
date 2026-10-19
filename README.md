@@ -122,8 +122,8 @@ reads `worker/.env`.
 | Variable | Required | Notes |
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | yes | `https://<ref>.supabase.co`. Safe in the browser. |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | yes | Safe in the browser — RLS is what protects the data. |
-| `SUPABASE_SERVICE_ROLE_KEY` | yes | **Bypasses RLS.** Server-side only. Never add a `NEXT_PUBLIC_` prefix. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | yes | The `sb_publishable_…` key. Safe in the browser — RLS is what protects the data. The legacy name `NEXT_PUBLIC_SUPABASE_ANON_KEY` (anon JWT) is still accepted. |
+| `SUPABASE_SERVICE_ROLE_KEY` | yes | The `sb_secret_…` secret key (or legacy `service_role` key). **Bypasses RLS.** Server-side only. Never add a `NEXT_PUBLIC_` prefix. |
 | `ANTHROPIC_API_KEY` | no | Enables "Draft with AI". Server-side only. Without it the app runs and messages can be written by hand; the generate endpoint answers `ai_not_configured`. |
 | `OUTREACH_AI_MODEL` | no | Model for drafts. Defaults to `claude-opus-5-5`. |
 
