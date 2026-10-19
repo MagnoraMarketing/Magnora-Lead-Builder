@@ -8,6 +8,8 @@ const NAV = [
   { href: '/search', label: 'Search', icon: SearchIcon },
   { href: '/dashboard', label: 'Dashboard', icon: GridIcon },
   { href: '/leads', label: 'Leads', icon: UsersIcon },
+  { href: '/campaigns', label: 'Campaigns', icon: FlagIcon },
+  { href: '/messages', label: 'Messages', icon: ChatIcon },
   { href: '/jobs', label: 'Jobs', icon: ListIcon },
   { href: '/settings', label: 'Settings', icon: CogIcon },
 ] as const;
@@ -18,8 +20,8 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <nav className="flex h-full flex-col gap-1 p-3" aria-label="Main">
       <div className="mb-4 px-2 pt-1">
-        <span className="text-sm font-semibold tracking-tight text-slate-900">Lead Finder</span>
-        <p className="text-xs text-slate-500">LinkedIn B2B prospecting</p>
+        <span className="text-sm font-semibold tracking-tight text-slate-900">Lead Builder</span>
+        <p className="text-xs text-slate-500">LinkedIn prospecting &amp; outreach</p>
       </div>
 
       {NAV.map(({ href, label, icon: Icon }) => {
@@ -70,6 +72,22 @@ function UsersIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path d="M10 9a3 3 0 100-6 3 3 0 000 6zM3 17a7 7 0 0114 0H3z" />
+    </svg>
+  );
+}
+
+function FlagIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M4 2a1 1 0 011 1v.5h9.38a1 1 0 01.8 1.6L13.25 8l1.93 2.9a1 1 0 01-.8 1.6H5V18a1 1 0 11-2 0V3a1 1 0 011-1z" />
+    </svg>
+  );
+}
+
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M3 4a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H8l-4 4v-4H5a2 2 0 01-2-2V4z" />
     </svg>
   );
 }

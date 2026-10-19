@@ -1,5 +1,5 @@
 {
-  "name": "linkedin-lead-finder",
+  "name": "magnora-lead-builder",
   "version": "1.0.0",
   "private": true,
   "engines": {
@@ -16,6 +16,7 @@
     "format": "prettier --write ."
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.135.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.45.4",
     "next": "^15.0.3",

@@ -39,6 +39,7 @@ export function applyLeadFilters<Result, ClientOptions extends { PostgrestVersio
   if (query.country) q = q.eq('country', query.country);
   if (query.industry) q = q.eq('industry', query.industry);
   if (query.jobId) q = q.eq('job_id', query.jobId);
+  if (query.campaignId) q = q.eq('campaign_id', query.campaignId);
 
   if (query.search) {
     // Strip PostgREST's `or` separators so a search term cannot alter the filter.

@@ -79,3 +79,27 @@ export function missingSupabaseEnv(): RequiredSupabaseEnv[] {
 export function isSupabaseConfigured(): boolean {
   return missingSupabaseEnv().length === 0;
 }
+
+/** Used when OUTREACH_AI_MODEL is unset. */
+export const DEFAULT_OUTREACH_AI_MODEL = 'claude-opus-5-5';
+
+/**
+ * Optional AI configuration for drafting outreach messages.
+ *
+ * Server-only, like the service role key: the Anthropic API key must never be
+ * given a NEXT_PUBLIC_ prefix. Missing is a supported state — the app runs,
+ * and the generate endpoint answers `ai_not_configured` instead of failing.
+ */
+export function aiEnv(): { apiKey: string | null; model: string } {
+  if (typeof window !== 'undefined') {
+    throw new Error('aiEnv() must never be called in the browser.');
+  }
+  return {
+    apiKey: process.env.ANTHROPIC_API_KEY || null,
+    model: process.env.OUTREACH_AI_MODEL || DEFAULT_OUTREACH_AI_MODEL,
+  };
+}
+
+export function isAiConfigured(): boolean {
+  return aiEnv().apiKey !== null;
+}

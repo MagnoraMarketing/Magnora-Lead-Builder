@@ -26,6 +26,7 @@ function makeLead(overrides: Partial<Lead> = {}): Lead {
     status: 'new',
     notes: null,
     job_id: 'job-1',
+    campaign_id: null,
     created_at: '2026-01-15T10:00:00Z',
     updated_at: '2026-01-15T10:00:00Z',
     ...overrides,

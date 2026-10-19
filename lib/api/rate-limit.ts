@@ -14,6 +14,11 @@ export const RATE_LIMITS = {
   mutateLead: { bucket: 'mutate_lead', limit: 120, windowSeconds: 60 },
   exportLeads: { bucket: 'export_leads', limit: 20, windowSeconds: 60 * 10 },
   dialerExport: { bucket: 'dialer_export', limit: 20, windowSeconds: 60 * 10 },
+  // Each generation is a paid AI call, so it is capped like search creation.
+  generateMessage: { bucket: 'generate_message', limit: 60, windowSeconds: 60 * 60 },
+  mutateMessage: { bucket: 'mutate_message', limit: 120, windowSeconds: 60 },
+  mutateCampaign: { bucket: 'mutate_campaign', limit: 60, windowSeconds: 60 },
+  importLeads: { bucket: 'import_leads', limit: 10, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation';
 import { Badge, Button, Card, CardHeader, EmptyState, StatCard } from '@/components/ui';
 import { JOB_STATUS_LABELS, JOB_STATUS_STYLES } from '@/lib/constants/leads';
 import { createClient } from '@/lib/supabase/server';
-import type { DashboardStats, ScrapingJob } from '@/types/database';
+import type { DashboardStats, OutreachStats, ScrapingJob } from '@/types/database';
 
 export const metadata: Metadata = { title: 'Dashboard' };
 export const dynamic = 'force-dynamic';
@@ -16,7 +16,7 @@ export default async function DashboardPage() {
   } = await supabase.auth.getUser();
   if (!user) redirect('/login');
 
-  const [{ data: statsRows }, { data: jobs }] = await Promise.all([
+  const [{ data: statsRows }, { data: jobs }, { data: outreachRows }] = await Promise.all([
     supabase.rpc('dashboard_stats'),
     supabase
       .from('scraping_jobs')
@@ -25,7 +25,15 @@ export default async function DashboardPage() {
       .order('created_at', { ascending: false })
       .limit(8)
       .returns<ScrapingJob[]>(),
+    supabase.rpc('outreach_stats'),
   ]);
+
+  const outreach: OutreachStats = outreachRows?.[0] ?? {
+    draft_messages: 0,
+    approved_messages: 0,
+    sent_messages: 0,
+    active_campaigns: 0,
+  };
 
   const stats: DashboardStats = statsRows?.[0] ?? {
     total_leads: 0,
@@ -55,6 +63,21 @@ export default async function DashboardPage() {
         <StatCard label="Qualified" value={stats.qualified_leads} />
         <StatCard label="Contacted" value={stats.contacted_leads} />
         <StatCard label="Meetings" value={stats.meeting_leads} />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href="/messages?status=draft">
+          <StatCard label="Drafts to review" value={outreach.draft_messages} />
+        </Link>
+        <Link href="/messages?status=approved">
+          <StatCard label="Approved, not sent" value={outreach.approved_messages} />
+        </Link>
+        <Link href="/messages?status=sent">
+          <StatCard label="Messages sent" value={outreach.sent_messages} />
+        </Link>
+        <Link href="/campaigns">
+          <StatCard label="Active campaigns" value={outreach.active_campaigns} />
+        </Link>
       </div>
 
       <Card>

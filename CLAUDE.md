@@ -10,30 +10,32 @@ Read this before recommending a host, an integration, or a Supabase project.
 
 ## Supabase project
 
-**`mjncziwoqpqhljcoevoe`** (region `eu-west-2`, West Europe / London).
+**Not created yet.** This repository (Magnora Lead Builder) gets a new
+Supabase account and project; the owner is setting it up. Until then, do not
+connect to, read from or migrate any Supabase project for this app.
 
-- Project URL: `https://mjncziwoqpqhljcoevoe.supabase.co`
-- The ref is baked into every API key issued by the project: the middle segment
-  of the anon JWT decodes to `{"iss":"supabase","ref":"mjncziwoqpqhljcoevoe"}`.
-  Use that to confirm a key belongs to this project before pasting it anywhere.
+- `mjncziwoqpqhljcoevoe` is the project of the source repository
+  (`linkedin-scraper-best`), not this one.
+- The Supabase MCP connector in Claude sessions has pointed at
+  `jrnivwqlvmoniwarpjlr`, an unrelated AI-booking project with its own `leads`
+  table. Never apply these migrations there.
 
-An earlier project ref appeared in tooling and was wrong. If a Supabase tool
-reports a different ref, or its database calls fail with
-`28P01: password authentication failed`, the tool is pointed at a stale
-project — trust this file, not the tool.
-
-**Schema status:** all four migrations in `supabase/migrations/` are applied —
-five tables (`user_settings`, `scraping_jobs`, `leads`, `job_logs`,
-`api_rate_limits`) and six functions (`claim_next_job`, `job_heartbeat`,
-`finish_job`, `upsert_lead`, `dashboard_stats`, `check_rate_limit`), all
-verified present. Do not re-run the migrations; they are not idempotent and
-will fail on `type "job_status" already exists`.
-
-They were applied through the SQL editor, so
-`supabase_migrations.schema_migrations` does not record them. That is what
-`supabase/repair-migration-ledger.sql` is for.
+**Schema status:** nothing applied. On the new project run all five files in
+`supabase/migrations/` from scratch, preferably with `supabase db push`, so the
+ledger is recorded and `repair-migration-ledger.sql` is never needed. Record
+the new project ref here once it exists.
 
 ---
+
+## AI outreach
+
+Drafts are generated server-side with the Anthropic SDK (`lib/ai/outreach.ts`),
+key in `ANTHROPIC_API_KEY` on Vercel only. The generator sees only stored lead
+fields and campaign text — no tools, no web access — and must not imply
+research it has not done. Drafts are saved as `draft`; only the explicit
+"Mark as sent" action, from `approved`, sets `sent`. Copying text never
+changes a message. These rules are enforced by the `outreach_messages_guard`
+trigger, not just the UI.
 
 ## The worker runs on a Windows PC
 
@@ -78,10 +80,11 @@ Two places, and only two:
 
 | Where | What |
 |---|---|
-| Vercel → project `linkedin-scraper-best` → Environment Variables | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` |
+| Vercel → this app's project (to be created) → Environment Variables | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `ANTHROPIC_API_KEY` (optional: `OUTREACH_AI_MODEL`) |
 | `worker/.env` on the operator's PC | `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LINKEDIN_EMAIL`, `LINKEDIN_PASSWORD` |
 
-LinkedIn credentials never go on Vercel — nothing there reads them.
+LinkedIn credentials never go on Vercel — nothing there reads them. The
+Anthropic key never goes on the worker — nothing there reads it.
 
 `NEXT_PUBLIC_*` values are inlined into the browser bundle **at build time**, so
 changing them in Vercel requires a redeploy. Editing the variable alone leaves
@@ -100,8 +103,9 @@ reappeared after deletion before.
 ## Verifying a change
 
 ```bash
-npm run lint && npx vitest run          # 89 tests
-cd worker && python -m pytest -q        # 57 tests
+npm run lint && npm run typecheck && npx vitest run   # 136 tests
+./scripts/test-db.sh                                  # SQL suites (needs local Postgres 15+)
+cd worker && python -m pytest -q                      # 57 tests
 ```
 
 CI runs both on every push.

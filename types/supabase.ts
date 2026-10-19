@@ -25,6 +25,12 @@ export type LeadStatusEnum =
 
 export type LogLevelEnum = 'info' | 'warn' | 'error';
 
+export type CampaignStatusEnum = 'active' | 'paused' | 'archived';
+
+export type MessageStatusEnum = 'draft' | 'approved' | 'sent' | 'archived';
+
+export type MessageChannelEnum = 'connection_request' | 'direct_message';
+
 type LeadRow = {
   id: string;
   user_id: string;
@@ -48,6 +54,40 @@ type LeadRow = {
   status: LeadStatusEnum;
   notes: string | null;
   job_id: string | null;
+  campaign_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type CampaignRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  description: string | null;
+  sender_name: string | null;
+  sender_company: string | null;
+  offer: string | null;
+  call_to_action: string | null;
+  tone: 'professional' | 'friendly' | 'direct';
+  language: 'da' | 'en';
+  status: CampaignStatusEnum;
+  created_at: string;
+  updated_at: string;
+};
+
+type OutreachMessageRow = {
+  id: string;
+  user_id: string;
+  lead_id: string;
+  campaign_id: string | null;
+  channel: MessageChannelEnum;
+  body: string;
+  status: MessageStatusEnum;
+  source: 'ai' | 'manual';
+  ai_model: string | null;
+  edited: boolean;
+  approved_at: string | null;
+  sent_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -132,6 +172,26 @@ export type Database = {
         Update: Partial<Omit<UserSettingsRow, 'user_id'>>;
         Relationships: [];
       };
+      campaigns: {
+        Row: CampaignRow;
+        Insert: Insertable<CampaignRow, 'user_id' | 'name'>;
+        Update: Partial<Omit<CampaignRow, 'id' | 'user_id'>>;
+        Relationships: [];
+      };
+      outreach_messages: {
+        Row: OutreachMessageRow;
+        Insert: Insertable<OutreachMessageRow, 'user_id' | 'lead_id' | 'body'>;
+        Update: Partial<Omit<OutreachMessageRow, 'id' | 'user_id' | 'lead_id'>>;
+        Relationships: [
+          {
+            foreignKeyName: 'outreach_messages_lead_fk';
+            columns: ['lead_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -147,6 +207,29 @@ export type Database = {
           running_jobs: number;
         }[];
       };
+      outreach_stats: {
+        Args: Record<string, never>;
+        Returns: {
+          draft_messages: number;
+          approved_messages: number;
+          sent_messages: number;
+          active_campaigns: number;
+        }[];
+      };
+      campaign_summaries: {
+        Args: Record<string, never>;
+        Returns: {
+          campaign_id: string;
+          lead_count: number;
+          draft_messages: number;
+          approved_messages: number;
+          sent_messages: number;
+        }[];
+      };
+      import_leads: {
+        Args: { p_rows: Json; p_campaign_id?: string | null };
+        Returns: { inserted: number; skipped: number }[];
+      };
       check_rate_limit: {
         Args: {
           p_user_id: string;
@@ -161,6 +244,9 @@ export type Database = {
       job_status: JobStatusEnum;
       lead_status: LeadStatusEnum;
       log_level: LogLevelEnum;
+      campaign_status: CampaignStatusEnum;
+      message_status: MessageStatusEnum;
+      message_channel: MessageChannelEnum;
     };
     CompositeTypes: Record<string, never>;
   };

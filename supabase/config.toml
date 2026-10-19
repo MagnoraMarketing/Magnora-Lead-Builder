@@ -9,7 +9,7 @@
 # checks are skipped without it — and what `supabase link` / `supabase db push`
 # read when applying supabase/migrations/.
 
-project_id = "linkedin-lead-finder"
+project_id = "magnora-lead-builder"
 
 [db]
 # Match the Postgres major version of the hosted project, so anything verified

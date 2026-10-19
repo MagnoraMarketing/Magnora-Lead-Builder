@@ -1,7 +1,12 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Alert } from '@/components/ui';
-import { REQUIRED_SUPABASE_ENV, missingSupabaseEnv, type RequiredSupabaseEnv } from '@/lib/env';
+import {
+  REQUIRED_SUPABASE_ENV,
+  isAiConfigured,
+  missingSupabaseEnv,
+  type RequiredSupabaseEnv,
+} from '@/lib/env';
 
 export const metadata: Metadata = { title: 'Setup required' };
 
@@ -31,6 +36,7 @@ export default function SetupPage() {
   const missing = missingSupabaseEnv();
   const missingSet = new Set<string>(missing);
   const configured = missing.length === 0;
+  const aiConfigured = isAiConfigured();
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-16">
@@ -90,6 +96,28 @@ export default function SetupPage() {
             give it a <code className="font-mono">NEXT_PUBLIC_</code> prefix — that would publish it
             to every visitor&rsquo;s browser.
           </p>
+        </div>
+
+        <div className="rounded-lg border border-slate-200 bg-white p-5">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-sm font-semibold text-slate-900">AI message drafting (optional)</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                <code className="font-mono text-xs">ANTHROPIC_API_KEY</code> — from the Anthropic
+                Console. Server-side only, like the service role key. Without it the app works and
+                messages can still be written by hand.
+              </p>
+            </div>
+            <span
+              className={
+                aiConfigured
+                  ? 'shrink-0 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800'
+                  : 'shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600'
+              }
+            >
+              {aiConfigured ? 'Set' : 'Not set'}
+            </span>
+          </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-5">

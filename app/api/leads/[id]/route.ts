@@ -60,6 +60,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (error) {
       // A unique index rejected the edit: the new value collides with a lead
       // the user already has. Say which, rather than showing a Postgres error.
+      if (error.code === '23503') {
+        return fail('invalid_campaign', 'That campaign does not exist.', 422);
+      }
       if (error.code === '23505') {
         return fail(
           'duplicate_lead',

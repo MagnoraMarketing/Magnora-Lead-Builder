@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCampaigns } from '@/components/campaigns/useCampaigns';
+import { ImportLeadsModal } from '@/components/leads/ImportLeadsModal';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Button, Card, EmptyState, Spinner, cx } from '@/components/ui';
 import { ApiRequestError, apiFetch } from '@/lib/api/client';
@@ -24,10 +26,13 @@ export function LeadsTable() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const jobIdFilter = searchParams.get('jobId') ?? undefined;
+  const campaigns = useCampaigns();
 
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [status, setStatus] = useState<LeadStatus | ''>('');
+  const [campaignId, setCampaignId] = useState(searchParams.get('campaignId') ?? '');
+  const [importOpen, setImportOpen] = useState(false);
   const [sort, setSort] = useState<SortColumn>('created_at');
   const [direction, setDirection] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(1);
@@ -58,8 +63,9 @@ export function LeadsTable() {
     if (debouncedSearch) params.set('search', debouncedSearch);
     if (status) params.set('status', status);
     if (jobIdFilter) params.set('jobId', jobIdFilter);
+    if (campaignId) params.set('campaignId', campaignId);
     return params.toString();
-  }, [page, sort, direction, debouncedSearch, status, jobIdFilter]);
+  }, [page, sort, direction, debouncedSearch, status, jobIdFilter, campaignId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -124,6 +130,26 @@ export function LeadsTable() {
     }
   }
 
+  async function bulkCampaign(newCampaignId: string | null) {
+    setBusy(true);
+    try {
+      await apiFetch('/api/leads', {
+        method: 'POST',
+        body: JSON.stringify({
+          action: 'set_campaign',
+          leadIds: [...selected],
+          campaignId: newCampaignId,
+        }),
+      });
+      setSelected(new Set());
+      await load();
+    } catch (err) {
+      setError(err instanceof ApiRequestError ? err.message : 'Could not update those leads.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function bulkDelete() {
     setBusy(true);
     try {
@@ -155,6 +181,7 @@ export function LeadsTable() {
                   ...(debouncedSearch ? { search: debouncedSearch } : {}),
                   ...(status ? { status } : {}),
                   ...(jobIdFilter ? { jobId: jobIdFilter } : {}),
+                  ...(campaignId ? { campaignId } : {}),
                 },
               }
             : { mode };
@@ -235,7 +262,32 @@ export function LeadsTable() {
             </select>
           </div>
 
-          <div className="ml-auto flex gap-2">
+          <div>
+            <label htmlFor="lead-campaign-filter" className="field-label">
+              Campaign
+            </label>
+            <select
+              id="lead-campaign-filter"
+              value={campaignId}
+              onChange={(e) => {
+                setCampaignId(e.target.value);
+                setPage(1);
+              }}
+              className="field-input"
+            >
+              <option value="">All campaigns</option>
+              {campaigns.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="ml-auto flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => setImportOpen(true)} disabled={busy}>
+              Import CSV
+            </Button>
             <Button variant="secondary" onClick={() => exportCsv('filtered')} disabled={busy}>
               Export filtered
             </Button>
@@ -267,6 +319,24 @@ export function LeadsTable() {
               </option>
             ))}
           </select>
+          <select
+            aria-label="Assign selected leads to a campaign"
+            className="field-input w-auto py-1.5 text-xs"
+            value=""
+            disabled={busy}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value) void bulkCampaign(value === 'none' ? null : value);
+            }}
+          >
+            <option value="">Assign campaign…</option>
+            <option value="none">Remove from campaign</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
           <Button size="sm" variant="secondary" onClick={() => exportCsv('selected')} disabled={busy}>
             Export selected
           </Button>
@@ -292,12 +362,12 @@ export function LeadsTable() {
           <EmptyState
             title="No leads found"
             description={
-              debouncedSearch || status
+              debouncedSearch || status || campaignId
                 ? 'Nothing matches those filters. Try clearing them.'
-                : 'Run a search to start collecting leads.'
+                : 'Run a search or import a CSV to start collecting leads.'
             }
             action={
-              !debouncedSearch && !status ? (
+              !debouncedSearch && !status && !campaignId ? (
                 <Link href="/search">
                   <Button>Start a search</Button>
                 </Link>
@@ -460,6 +530,13 @@ export function LeadsTable() {
           </>
         )}
       </Card>
+
+      <ImportLeadsModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImported={() => void load()}
+        campaigns={campaigns}
+      />
 
       <Modal
         open={confirmDelete}

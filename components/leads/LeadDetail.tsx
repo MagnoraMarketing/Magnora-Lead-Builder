@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { useCampaigns } from '@/components/campaigns/useCampaigns';
+import { OutreachPanel } from '@/components/outreach/OutreachPanel';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Button, Card, CardBody, CardHeader } from '@/components/ui';
 import { ApiRequestError, apiFetch } from '@/lib/api/client';
@@ -36,6 +38,7 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const campaigns = useCampaigns();
 
   function startEditing() {
     const next: Record<string, string> = {};
@@ -101,6 +104,16 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
       setError(err instanceof ApiRequestError ? err.message : 'Could not save your changes.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function reloadLead() {
+    try {
+      const data = await apiFetch<{ lead: Lead }>(`/api/leads/${lead.id}`);
+      setLead(data.lead);
+      router.refresh();
+    } catch {
+      // The status shown is stale until the next page load; nothing else depends on it.
     }
   }
 
@@ -217,6 +230,31 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
           ))}
         </CardBody>
       </Card>
+
+      <Card>
+        <CardHeader title="Campaign" />
+        <CardBody>
+          <label htmlFor="lead-campaign" className="sr-only">
+            Campaign
+          </label>
+          <select
+            id="lead-campaign"
+            value={lead.campaign_id ?? ''}
+            disabled={saving}
+            onChange={(e) => void patch({ campaign_id: e.target.value || null })}
+            className="field-input sm:max-w-sm"
+          >
+            <option value="">No campaign</option>
+            {campaigns.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </CardBody>
+      </Card>
+
+      <OutreachPanel lead={lead} onSent={() => void reloadLead()} />
 
       <Card>
         <CardHeader
