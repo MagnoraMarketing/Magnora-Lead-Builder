@@ -13,7 +13,7 @@ import { MESSAGE_MAX_LENGTH, MESSAGE_TARGET_LENGTH, type MessageChannel } from '
 import type { Campaign, Lead } from '@/types/database';
 
 /** Bump when the prompt changes meaningfully, so stored drafts can be traced. */
-export const PROMPT_VERSION = 'outreach-v1';
+export const PROMPT_VERSION = 'outreach-v2';
 
 /** What the generator may write, at most, per channel. Tighter than the DB cap. */
 export const AI_MAX_LENGTH: Record<MessageChannel, number> = {
@@ -40,12 +40,35 @@ export type CampaignContext = Pick<
   'name' | 'sender_name' | 'sender_company' | 'offer' | 'call_to_action' | 'tone' | 'language'
 >;
 
+export type OutreachKind = 'initial' | 'follow_up' | 'reply';
+
+/** One turn of the conversation so far, oldest first. */
+export interface ConversationEntry {
+  from: 'sender' | 'lead';
+  body: string;
+  at: string;
+}
+
 export interface OutreachPromptInput {
   lead: LeadFacts;
   campaign: CampaignContext | null;
   channel: MessageChannel;
   instructions?: string;
+  /** Defaults to a first message. */
+  kind?: OutreachKind;
+  /** The angle for a follow-up, from the campaign step or the user. */
+  topic?: string | null;
+  /** Messages already sent and replies received, oldest first. */
+  conversation?: ConversationEntry[];
 }
+
+const KIND_GUIDANCE: Record<OutreachKind, string> = {
+  initial: 'This is the first message to this person.',
+  follow_up:
+    'This is a follow-up. The person has not replied to the earlier messages shown in <conversation>. Do not repeat them or apologise for following up; add one new, relevant reason to talk, briefly.',
+  reply:
+    'The person has replied; their latest message is the last entry in <conversation>. Answer what they actually wrote. If they ask something the facts below do not answer, do not guess — offer to clarify on a short call or say you will come back with the details.',
+};
 
 export interface OutreachPrompt {
   system: string;
@@ -73,6 +96,9 @@ export function buildOutreachPrompt({
   campaign,
   channel,
   instructions,
+  kind = 'initial',
+  topic,
+  conversation = [],
 }: OutreachPromptInput): OutreachPrompt {
   const language = campaign?.language === 'en' ? 'English' : 'Danish';
   const tone = TONE_GUIDANCE[campaign?.tone ?? 'professional'];
@@ -94,6 +120,7 @@ export function buildOutreachPrompt({
     `- Write in ${language}. Address the recipient by first name.`,
     `- Tone: ${tone}`,
     `- ${channelRules}`,
+    `- ${KIND_GUIDANCE[kind]}`,
     '',
     'Return the finished message in the `message` field.',
   ].join('\n');
@@ -129,11 +156,22 @@ export function buildOutreachPrompt({
     );
   }
 
+  if (conversation.length > 0) {
+    const lines = conversation.map(
+      (entry) => `[${entry.at.slice(0, 10)}] ${entry.from === 'sender' ? 'Sender' : 'Recipient'}: ${entry.body.trim()}`,
+    );
+    parts.push(`<conversation>\n${lines.join('\n\n')}\n</conversation>`);
+  }
+
+  if (topic?.trim()) {
+    parts.push(`<follow_up_topic>\n${topic.trim()}\n</follow_up_topic>`);
+  }
+
   if (instructions?.trim()) {
     parts.push(`<extra_guidance_from_sender>\n${instructions.trim()}\n</extra_guidance_from_sender>`);
   }
 
-  parts.push('Draft the message now.');
+  parts.push(kind === 'reply' ? 'Draft the reply now.' : 'Draft the message now.');
 
   return { system, user: parts.join('\n\n') };
 }

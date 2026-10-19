@@ -6,6 +6,7 @@ import { cx } from '@/components/ui';
 
 const NAV = [
   { href: '/builder', label: 'Lead Builder', icon: SparkIcon },
+  { href: '/today', label: 'Today', icon: CalendarIcon },
   { href: '/search', label: 'Search', icon: SearchIcon },
   { href: '/dashboard', label: 'Dashboard', icon: GridIcon },
   { href: '/leads', label: 'Leads', icon: UsersIcon },
@@ -46,6 +47,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
         );
       })}
     </nav>
+  );
+}
+
+function CalendarIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path d="M6 2a1 1 0 011 1v1h6V3a1 1 0 112 0v1h1a2 2 0 012 2v10a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h1V3a1 1 0 011-1zM4 9v7h12V9H4z" />
+    </svg>
   );
 }
 

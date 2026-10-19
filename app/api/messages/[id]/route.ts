@@ -10,7 +10,7 @@ import {
   validationError,
 } from '@/lib/api/response';
 import { MESSAGE_MAX_LENGTH } from '@/lib/constants/outreach';
-import { applyMessageAction, canEditBody } from '@/lib/outreach/lifecycle';
+import { applyMessageAction, canEditBody, canSchedule } from '@/lib/outreach/lifecycle';
 import { updateMessageSchema } from '@/lib/validation/schemas';
 import type { OutreachMessage } from '@/types/database';
 
@@ -46,7 +46,7 @@ export async function PATCH(request: Request, { params }: Params) {
     if (loadError) return serverError('messages:patch:load', loadError);
     if (!current) return notFound('Message');
 
-    let patch: Partial<Pick<OutreachMessage, 'body' | 'status'>>;
+    let patch: Partial<Pick<OutreachMessage, 'body' | 'status' | 'scheduled_for'>>;
 
     if (input.action === 'edit') {
       if (!canEditBody(current.status)) {
@@ -61,6 +61,11 @@ export async function PATCH(request: Request, { params }: Params) {
       patch = { body: input.body };
       // Approval belongs to the exact words approved.
       if (current.status === 'approved' && input.body !== current.body) patch.status = 'draft';
+    } else if (input.action === 'schedule') {
+      if (!canSchedule(current.status)) {
+        return fail('message_sent', 'A sent message cannot be rescheduled.', 409);
+      }
+      patch = { scheduled_for: input.scheduledFor };
     } else {
       const transition = applyMessageAction(current.status, input.action);
       if (!transition.ok) return fail('invalid_transition', transition.reason, 409);

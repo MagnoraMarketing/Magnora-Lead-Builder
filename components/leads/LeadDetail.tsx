@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useCampaigns } from '@/components/campaigns/useCampaigns';
+import { ConversationPanel } from '@/components/outreach/ConversationPanel';
 import { OutreachPanel } from '@/components/outreach/OutreachPanel';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Badge, Button, Card, CardBody, CardHeader } from '@/components/ui';
@@ -39,6 +40,12 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const campaigns = useCampaigns();
+  const [conversationKey, setConversationKey] = useState(0);
+  const [enriching, setEnriching] = useState(false);
+  const [enrichNote, setEnrichNote] = useState<{
+    tone: 'success' | 'info' | 'error';
+    text: string;
+  } | null>(null);
 
   function startEditing() {
     const next: Record<string, string> = {};
@@ -117,6 +124,37 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
     }
   }
 
+  async function enrich() {
+    setEnriching(true);
+    setEnrichNote(null);
+    try {
+      const data = await apiFetch<{
+        lead: Lead;
+        found: boolean;
+        filled: string[];
+        phonePending: boolean;
+      }>(`/api/leads/${lead.id}/enrich`, { method: 'POST' });
+      setLead(data.lead);
+      const parts: string[] = [];
+      if (!data.found) parts.push('Apollo found no match for this person.');
+      else if (data.filled.length > 0) parts.push(`Filled in: ${data.filled.join(', ')}.`);
+      else
+        parts.push(
+          'Apollo matched the person but had nothing new (only verified emails are used).',
+        );
+      if (data.phonePending)
+        parts.push('Phone numbers arrive within a few minutes — reload to see them.');
+      setEnrichNote({ tone: data.found ? 'success' : 'info', text: parts.join(' ') });
+    } catch (err) {
+      setEnrichNote({
+        tone: 'error',
+        text: err instanceof ApiRequestError ? err.message : 'The contact lookup failed.',
+      });
+    } finally {
+      setEnriching(false);
+    }
+  }
+
   async function remove() {
     setSaving(true);
     try {
@@ -136,11 +174,9 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
       <Card>
         <CardHeader
           title={lead.full_name}
-          description={
-            [lead.job_title, lead.company_name].filter(Boolean).join(' · ') || undefined
-          }
+          description={[lead.job_title, lead.company_name].filter(Boolean).join(' · ') || undefined}
           action={
-            <div className="flex shrink-0 gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               {editing ? (
                 <>
                   <Button variant="secondary" size="sm" onClick={() => setEditing(false)}>
@@ -152,6 +188,15 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
                 </>
               ) : (
                 <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => void enrich()}
+                    loading={enriching}
+                    disabled={lead.status === 'do_not_contact'}
+                  >
+                    Find email &amp; phone
+                  </Button>
                   <Button variant="secondary" size="sm" onClick={startEditing}>
                     Edit
                   </Button>
@@ -165,6 +210,11 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
         />
 
         <CardBody>
+          {enrichNote && (
+            <div className="mb-4">
+              <Alert tone={enrichNote.tone}>{enrichNote.text}</Alert>
+            </div>
+          )}
           {editing ? (
             <div className="grid gap-4 sm:grid-cols-2">
               {EDITABLE_FIELDS.map((field) => (
@@ -254,14 +304,30 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
         </CardBody>
       </Card>
 
-      <OutreachPanel lead={lead} onSent={() => void reloadLead()} />
+      <OutreachPanel
+        lead={lead}
+        onSent={() => {
+          void reloadLead();
+          setConversationKey((k) => k + 1);
+        }}
+      />
+
+      <ConversationPanel
+        lead={lead}
+        refreshKey={conversationKey}
+        onReplyRecorded={() => void reloadLead()}
+      />
 
       <Card>
         <CardHeader
           title="Notes"
           action={
             notes !== (lead.notes ?? '') ? (
-              <Button size="sm" onClick={() => void patch({ notes: notes || null })} loading={saving}>
+              <Button
+                size="sm"
+                onClick={() => void patch({ notes: notes || null })}
+                loading={saving}
+              >
                 Save notes
               </Button>
             ) : undefined
@@ -312,15 +378,7 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
   );
 }
 
-function Field({
-  label,
-  value,
-  href,
-}: {
-  label: string;
-  value: string | null;
-  href?: string;
-}) {
+function Field({ label, value, href }: { label: string; value: string | null; href?: string }) {
   return (
     <div>
       <dt className="text-xs font-medium uppercase tracking-wide text-slate-500">{label}</dt>

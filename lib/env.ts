@@ -113,3 +113,28 @@ export function aiEnv(): { apiKey: string | null; model: string } {
 export function isAiConfigured(): boolean {
   return aiEnv().apiKey !== null;
 }
+
+/**
+ * Optional contact enrichment with Apollo.io. Server-only.
+ *
+ * Phone numbers arrive at a webhook, so they are only requested when the app
+ * knows its own public URL: APP_URL, or the production domain Vercel exposes.
+ * VERCEL_AUTOMATION_BYPASS_SECRET is set by Vercel when "Protection Bypass for
+ * Automation" is enabled, and lets Apollo past Vercel Authentication.
+ */
+export function enrichmentEnv(): {
+  apolloApiKey: string | null;
+  publicUrl: string | null;
+  bypassSecret: string | null;
+} {
+  if (typeof window !== 'undefined') {
+    throw new Error('enrichmentEnv() must never be called in the browser.');
+  }
+  const productionHost = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const publicUrl = process.env.APP_URL || (productionHost ? `https://${productionHost}` : '');
+  return {
+    apolloApiKey: process.env.APOLLO_API_KEY || null,
+    publicUrl: publicUrl ? publicUrl.replace(/\/+$/, '') : null,
+    bypassSecret: process.env.VERCEL_AUTOMATION_BYPASS_SECRET || null,
+  };
+}

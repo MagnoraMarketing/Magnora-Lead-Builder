@@ -18,6 +18,31 @@ export type OutreachMessageWithLead = OutreachMessage & {
   lead: Pick<Lead, 'id' | 'full_name' | 'job_title' | 'company_name' | 'linkedin_url'> | null;
 };
 
+export type CampaignStep = Database['public']['Tables']['campaign_steps']['Row'];
+export type LeadReply = Database['public']['Tables']['lead_replies']['Row'];
+export type FollowUpTask = Database['public']['Tables']['follow_up_tasks']['Row'];
+export type EnrichmentRequest = Database['public']['Tables']['enrichment_requests']['Row'];
+
+/** A follow-up task with the lead fields the Today list shows. */
+export type FollowUpTaskWithLead = FollowUpTask & {
+  lead: Pick<
+    Lead,
+    'id' | 'full_name' | 'job_title' | 'company_name' | 'linkedin_url' | 'status'
+  > | null;
+};
+
+/** A reply with the lead it came from, for the Today list. */
+export type LeadReplyWithLead = LeadReply & {
+  lead: Pick<Lead, 'id' | 'full_name' | 'job_title' | 'company_name' | 'linkedin_url' | 'status'> | null;
+};
+
+/** Everything that needs the user today, from GET /api/today. */
+export interface TodayOverview {
+  followUps: (FollowUpTaskWithLead & { message: OutreachMessage | null })[];
+  readyToSend: OutreachMessageWithLead[];
+  awaitingAnswer: LeadReplyWithLead[];
+}
+
 export type CampaignSummary =
   Database['public']['Functions']['campaign_summaries']['Returns'][number];
 export type OutreachStats = Database['public']['Functions']['outreach_stats']['Returns'][number];

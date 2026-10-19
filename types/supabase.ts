@@ -55,6 +55,8 @@ type LeadRow = {
   notes: string | null;
   job_id: string | null;
   campaign_id: string | null;
+  enrichment_status: 'pending' | 'found' | 'not_found' | 'failed' | null;
+  enriched_at: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -88,8 +90,64 @@ type OutreachMessageRow = {
   edited: boolean;
   approved_at: string | null;
   sent_at: string | null;
+  kind: 'initial' | 'follow_up' | 'reply';
+  sequence_step: number | null;
+  scheduled_for: string | null;
   created_at: string;
   updated_at: string;
+};
+
+type CampaignStepRow = {
+  id: string;
+  user_id: string;
+  campaign_id: string;
+  step_number: number;
+  delay_days: number;
+  topic: string | null;
+  channel: MessageChannelEnum;
+  created_at: string;
+  updated_at: string;
+};
+
+type LeadReplyRow = {
+  id: string;
+  user_id: string;
+  lead_id: string;
+  body: string;
+  received_at: string;
+  created_at: string;
+};
+
+export type FollowUpStatusEnum = 'pending' | 'drafted' | 'done' | 'cancelled';
+
+type FollowUpTaskRow = {
+  id: string;
+  user_id: string;
+  lead_id: string;
+  campaign_id: string | null;
+  step_number: number | null;
+  topic: string | null;
+  channel: MessageChannelEnum;
+  due_at: string;
+  status: FollowUpStatusEnum;
+  message_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type EnrichmentRequestRow = {
+  id: string;
+  user_id: string;
+  lead_id: string;
+  provider: string;
+  status: 'pending' | 'completed' | 'failed';
+  webhook_token: string | null;
+  phone_requested: boolean;
+  response: Json | null;
+  webhook_payload: Json | null;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
 };
 
 type ScrapingJobRow = {
@@ -176,6 +234,46 @@ export type Database = {
         Row: CampaignRow;
         Insert: Insertable<CampaignRow, 'user_id' | 'name'>;
         Update: Partial<Omit<CampaignRow, 'id' | 'user_id'>>;
+        Relationships: [];
+      };
+      campaign_steps: {
+        Row: CampaignStepRow;
+        Insert: Insertable<CampaignStepRow, 'user_id' | 'campaign_id' | 'step_number' | 'delay_days'>;
+        Update: Partial<Omit<CampaignStepRow, 'id' | 'user_id'>>;
+        Relationships: [];
+      };
+      lead_replies: {
+        Row: LeadReplyRow;
+        Insert: Insertable<LeadReplyRow, 'user_id' | 'lead_id' | 'body'>;
+        Update: Partial<Omit<LeadReplyRow, 'id' | 'user_id' | 'lead_id'>>;
+        Relationships: [
+          {
+            foreignKeyName: 'lead_replies_lead_fk';
+            columns: ['lead_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      follow_up_tasks: {
+        Row: FollowUpTaskRow;
+        Insert: Insertable<FollowUpTaskRow, 'user_id' | 'lead_id' | 'due_at'>;
+        Update: Partial<Omit<FollowUpTaskRow, 'id' | 'user_id' | 'lead_id'>>;
+        Relationships: [
+          {
+            foreignKeyName: 'follow_up_tasks_lead_fk';
+            columns: ['lead_id', 'user_id'];
+            isOneToOne: false;
+            referencedRelation: 'leads';
+            referencedColumns: ['id', 'user_id'];
+          },
+        ];
+      };
+      enrichment_requests: {
+        Row: EnrichmentRequestRow;
+        Insert: Insertable<EnrichmentRequestRow, 'user_id' | 'lead_id' | 'provider'>;
+        Update: Partial<Omit<EnrichmentRequestRow, 'id' | 'user_id' | 'lead_id'>>;
         Relationships: [];
       };
       outreach_messages: {

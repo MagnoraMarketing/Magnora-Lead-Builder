@@ -1,5 +1,6 @@
 import type { AiErrorCode } from '@/lib/ai/outreach';
-import { fail } from '@/lib/api/response';
+import { fail, notFound, serverError } from '@/lib/api/response';
+import type { DraftContext } from '@/lib/outreach/context';
 
 /** Lead columns shown next to each message in the queue. */
 export const MESSAGE_LEAD_SELECT =
@@ -31,4 +32,18 @@ export function aiNotConfigured() {
     'AI drafting is not set up on this deployment. Add ANTHROPIC_API_KEY to the server environment.',
     503,
   );
+}
+
+/** Turns a failed draft-context load into the matching API response. */
+export function draftContextFailure(context: Extract<DraftContext, { ok: false }>, where: string) {
+  switch (context.reason) {
+    case 'lead_not_found':
+      return notFound('Lead');
+    case 'campaign_not_found':
+      return notFound('Campaign');
+    case 'do_not_contact':
+      return doNotContact();
+    default:
+      return serverError(where, context.error);
+  }
 }

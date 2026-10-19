@@ -19,6 +19,8 @@ export const RATE_LIMITS = {
   mutateMessage: { bucket: 'mutate_message', limit: 120, windowSeconds: 60 },
   mutateCampaign: { bucket: 'mutate_campaign', limit: 60, windowSeconds: 60 },
   importLeads: { bucket: 'import_leads', limit: 10, windowSeconds: 60 * 60 },
+  // Each lookup spends the user's credits with the enrichment provider.
+  enrichLead: { bucket: 'enrich_lead', limit: 60, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, RateLimitRule>;
 
 /**

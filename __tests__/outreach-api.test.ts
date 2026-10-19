@@ -51,6 +51,16 @@ function builder(table: string, operation: string, payload?: unknown) {
     },
     order: () => b,
     range: () => b,
+    limit: () => b,
+    or: () => b,
+    gt(column: string, value: unknown) {
+      record.filters[`${column}>`] = value;
+      return b;
+    },
+    lte(column: string, value: unknown) {
+      record.filters[`${column}<=`] = value;
+      return b;
+    },
     returns: () => b,
     select: () => b,
     single: async () => {
@@ -81,6 +91,7 @@ const supabaseStub = {
       select: () => builder(table, 'select'),
       insert: (payload: unknown) => builder(table, 'insert', payload),
       update: (payload: unknown) => builder(table, 'update', payload),
+      upsert: (payload: unknown) => builder(table, 'upsert', payload),
       delete: () => builder(table, 'delete'),
     };
   },
@@ -91,9 +102,11 @@ const supabaseStub = {
 };
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => supabaseStub }));
+vi.mock('@/lib/supabase/admin', () => ({ createAdminClient: () => supabaseStub }));
 
 vi.mock('@/lib/api/rate-limit', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/api/rate-limit')>('@/lib/api/rate-limit');
+  const actual =
+    await vi.importActual<typeof import('@/lib/api/rate-limit')>('@/lib/api/rate-limit');
   return { ...actual, checkRateLimit: async () => true };
 });
 
@@ -104,21 +117,30 @@ vi.mock('@/lib/ai/outreach', async () => {
 });
 
 const { GET: listCampaigns, POST: createCampaign } = await import('@/app/api/campaigns/route');
-const { PATCH: patchCampaign, DELETE: deleteCampaign } = await import(
-  '@/app/api/campaigns/[id]/route'
-);
+const { PATCH: patchCampaign, DELETE: deleteCampaign } =
+  await import('@/app/api/campaigns/[id]/route');
 const { GET: listMessages, POST: createMessage } = await import('@/app/api/messages/route');
 const { POST: generateMessage } = await import('@/app/api/messages/generate/route');
-const { PATCH: patchMessage, DELETE: deleteMessage } = await import('@/app/api/messages/[id]/route');
+const { PATCH: patchMessage, DELETE: deleteMessage } =
+  await import('@/app/api/messages/[id]/route');
 const { POST: importLeads } = await import('@/app/api/leads/import/route');
 const { POST: builderGenerate } = await import('@/app/api/generate-message/route');
 const { POST: builderSave } = await import('@/app/api/builder/route');
 const { AiGenerationError } = await import('@/lib/ai/outreach');
+const { PUT: putSteps } = await import('@/app/api/campaigns/[id]/steps/route');
+const { POST: createFollowUp } = await import('@/app/api/followups/route');
+const { PATCH: patchFollowUp } = await import('@/app/api/followups/[id]/route');
+const { POST: createReply } = await import('@/app/api/leads/[id]/replies/route');
+const { GET: getToday } = await import('@/app/api/today/route');
+const { POST: enrichLead } = await import('@/app/api/leads/[id]/enrich/route');
+const { POST: apolloWebhook } = await import('@/app/api/webhooks/apollo/[token]/route');
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 const LEAD_ID = '22222222-2222-2222-2222-222222222222';
 const CAMPAIGN_ID = '44444444-4444-4444-4444-444444444444';
 const MESSAGE_ID = '55555555-5555-5555-5555-555555555555';
+const TASK_ID = '66666666-6666-6666-6666-666666666666';
+const TOKEN = 'a'.repeat(64);
 
 const json = (url: string, body: unknown, method = 'POST') =>
   new NextRequest(url, {
@@ -158,14 +180,25 @@ beforeEach(() => {
   rpcCalls = [];
   rpcResult = [];
   insertErrors = {};
-  tableRows = { leads: [], campaigns: [], outreach_messages: [] };
+  tableRows = {
+    leads: [],
+    campaigns: [],
+    outreach_messages: [],
+    follow_up_tasks: [],
+    lead_replies: [],
+    campaign_steps: [],
+    enrichment_requests: [],
+  };
   generateMock.mockReset();
   process.env.ANTHROPIC_API_KEY = 'test-key';
 });
 
 afterEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.APOLLO_API_KEY;
+  delete process.env.APP_URL;
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 describe('authentication', () => {
@@ -183,6 +216,12 @@ describe('authentication', () => {
       importLeads(json('http://localhost', { csv: 'Name\nJens' })),
       builderGenerate(json('http://localhost', {})),
       builderSave(json('http://localhost', {})),
+      putSteps(json('http://localhost', { steps: [] }, 'PUT'), params(CAMPAIGN_ID)),
+      createFollowUp(json('http://localhost', {})),
+      patchFollowUp(json('http://localhost', { action: 'skip' }, 'PATCH'), params(TASK_ID)),
+      createReply(json('http://localhost', { body: 'x' }), params(LEAD_ID)),
+      getToday(new NextRequest('http://localhost/api/today') as never),
+      enrichLead(new Request('http://localhost', { method: 'POST' }), params(LEAD_ID)),
     ]);
     for (const response of responses) {
       expect(response.status).toBe(401);
@@ -212,7 +251,10 @@ describe('campaigns', () => {
   it('scopes updates and deletes to the caller', async () => {
     signIn();
     tableRows.campaigns = [{ id: CAMPAIGN_ID, user_id: USER_ID, name: 'x' }];
-    await patchCampaign(json('http://localhost', { status: 'paused' }, 'PATCH'), params(CAMPAIGN_ID));
+    await patchCampaign(
+      json('http://localhost', { status: 'paused' }, 'PATCH'),
+      params(CAMPAIGN_ID),
+    );
     await deleteCampaign(new Request('http://localhost'), params(CAMPAIGN_ID));
     const writes = recorded.filter((q) => q.table === 'campaigns');
     expect(writes.map((q) => q.filters)).toEqual([
@@ -245,7 +287,9 @@ describe('AI generation', () => {
     const leadRead = recorded.find((q) => q.table === 'leads');
     expect(leadRead?.filters).toEqual({ id: LEAD_ID, user_id: USER_ID });
 
-    const insert = recorded.find((q) => q.table === 'outreach_messages' && q.operation === 'insert');
+    const insert = recorded.find(
+      (q) => q.table === 'outreach_messages' && q.operation === 'insert',
+    );
     expect(insert?.payload).toMatchObject({
       user_id: USER_ID,
       lead_id: LEAD_ID,
@@ -349,7 +393,9 @@ describe('CSV import', () => {
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.data).toMatchObject({ inserted: 1, duplicates: 0 });
-    expect(body.data.invalid).toEqual([{ line: 3, messages: ['email: Must be a valid email address'] }]);
+    expect(body.data.invalid).toEqual([
+      { line: 3, messages: ['email: Must be a valid email address'] },
+    ]);
 
     expect(rpcCalls).toHaveLength(1);
     expect(rpcCalls[0]?.fn).toBe('import_leads');
@@ -508,5 +554,307 @@ describe('AI Lead Builder', () => {
     );
     expect(response.status).toBe(422);
     expect(recorded).toHaveLength(0);
+  });
+});
+
+describe('follow-up sequences and replies', () => {
+  it("numbers campaign steps from 2 and checks the campaign is the caller's", async () => {
+    signIn();
+    tableRows.campaigns = [{ id: CAMPAIGN_ID, user_id: USER_ID }];
+    const response = await putSteps(
+      json(
+        'http://localhost',
+        {
+          steps: [
+            { delayDays: 3, topic: 'Nudge' },
+            { delayDays: 7, channel: 'connection_request' },
+          ],
+        },
+        'PUT',
+      ),
+      params(CAMPAIGN_ID),
+    );
+    expect(response.status).toBe(200);
+    const upsert = recorded.find((q) => q.table === 'campaign_steps' && q.operation === 'upsert');
+    expect(upsert?.payload).toEqual([
+      expect.objectContaining({
+        user_id: USER_ID,
+        campaign_id: CAMPAIGN_ID,
+        step_number: 2,
+        delay_days: 3,
+        topic: 'Nudge',
+      }),
+      expect.objectContaining({
+        step_number: 3,
+        delay_days: 7,
+        channel: 'connection_request',
+        topic: null,
+      }),
+    ]);
+    const trim = recorded.find((q) => q.table === 'campaign_steps' && q.operation === 'delete');
+    expect(trim?.filters).toMatchObject({
+      campaign_id: CAMPAIGN_ID,
+      user_id: USER_ID,
+      'step_number>': 3,
+    });
+  });
+
+  it('refuses steps for a campaign the caller does not own', async () => {
+    signIn();
+    tableRows.campaigns = [];
+    const response = await putSteps(
+      json('http://localhost', { steps: [] }, 'PUT'),
+      params(CAMPAIGN_ID),
+    );
+    expect(response.status).toBe(404);
+    expect(recorded.some((q) => q.operation === 'upsert' || q.operation === 'delete')).toBe(false);
+  });
+
+  it("plans a follow-up by hand for the caller's lead", async () => {
+    signIn();
+    tableRows.leads = [lead()];
+    const response = await createFollowUp(
+      json('http://localhost', {
+        leadId: LEAD_ID,
+        dueAt: '2026-10-25T08:00:00.000Z',
+        topic: 'Case study',
+      }),
+    );
+    expect(response.status).toBe(201);
+    const insert = recorded.find((q) => q.table === 'follow_up_tasks' && q.operation === 'insert');
+    expect(insert?.payload).toEqual({
+      user_id: USER_ID,
+      lead_id: LEAD_ID,
+      topic: 'Case study',
+      channel: 'direct_message',
+      due_at: '2026-10-25T08:00:00.000Z',
+    });
+  });
+
+  it('skips an open follow-up but not a closed one', async () => {
+    signIn();
+    tableRows.follow_up_tasks = [{ id: TASK_ID, user_id: USER_ID, status: 'pending' }];
+    const ok = await patchFollowUp(
+      json('http://localhost', { action: 'skip' }, 'PATCH'),
+      params(TASK_ID),
+    );
+    expect(ok.status).toBe(200);
+    expect(recorded.find((q) => q.operation === 'update')?.payload).toEqual({
+      status: 'cancelled',
+    });
+
+    recorded.length = 0;
+    tableRows.follow_up_tasks = [{ id: TASK_ID, user_id: USER_ID, status: 'done' }];
+    const closed = await patchFollowUp(
+      json('http://localhost', { action: 'skip' }, 'PATCH'),
+      params(TASK_ID),
+    );
+    expect(closed.status).toBe(409);
+    expect(recorded.some((q) => q.operation === 'update')).toBe(false);
+  });
+
+  it('records a reply owned by the caller', async () => {
+    signIn();
+    const response = await createReply(
+      json('http://localhost', { body: '  Tak, hvad koster det?  ' }),
+      params(LEAD_ID),
+    );
+    expect(response.status).toBe(201);
+    expect(recorded.find((q) => q.table === 'lead_replies')?.payload).toEqual({
+      user_id: USER_ID,
+      lead_id: LEAD_ID,
+      body: 'Tak, hvad koster det?',
+    });
+  });
+
+  it('drafts a planned follow-up with its topic and date, and links the task', async () => {
+    signIn();
+    tableRows.leads = [lead()];
+    tableRows.follow_up_tasks = [
+      {
+        id: TASK_ID,
+        user_id: USER_ID,
+        lead_id: LEAD_ID,
+        status: 'pending',
+        step_number: 2,
+        topic: 'Share a case',
+        channel: 'direct_message',
+        due_at: '2026-10-25T08:00:00.000Z',
+        campaign_id: null,
+      },
+    ];
+    generateMock.mockResolvedValue({ body: 'Hej igen Mette', model: 'claude-test' });
+
+    const response = await generateMessage(
+      json('http://localhost', { leadId: LEAD_ID, taskId: TASK_ID }),
+    );
+    expect(response.status).toBe(201);
+
+    const [input] = generateMock.mock.calls[0] as [{ kind: string; topic: string }];
+    expect(input).toMatchObject({ kind: 'follow_up', topic: 'Share a case' });
+
+    const insert = recorded.find(
+      (q) => q.table === 'outreach_messages' && q.operation === 'insert',
+    );
+    expect(insert?.payload).toMatchObject({
+      kind: 'follow_up',
+      sequence_step: 2,
+      scheduled_for: '2026-10-25T08:00:00.000Z',
+      channel: 'direct_message',
+    });
+    const link = recorded.find((q) => q.table === 'follow_up_tasks' && q.operation === 'update');
+    expect(link?.payload).toMatchObject({ status: 'drafted' });
+    expect(link?.filters).toEqual({ id: TASK_ID, user_id: USER_ID });
+  });
+
+  it("scopes the Today list to the caller and to the user's day", async () => {
+    signIn();
+    const until = '2026-10-19T21:59:59.999Z';
+    const response = await getToday(
+      new NextRequest(`http://localhost/api/today?until=${encodeURIComponent(until)}`) as never,
+    );
+    expect(response.status).toBe(200);
+    const tasks = recorded.find((q) => q.table === 'follow_up_tasks');
+    expect(tasks?.filters).toMatchObject({ user_id: USER_ID, 'due_at<=': until });
+    expect(
+      recorded
+        .filter((q) => q.table === 'outreach_messages')
+        .every((q) => q.filters.user_id === USER_ID),
+    ).toBe(true);
+  });
+});
+
+describe('contact enrichment', () => {
+  const apolloResponse = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+  it('answers enrichment_not_configured without an Apollo key', async () => {
+    signIn();
+    const response = await enrichLead(
+      new Request('http://localhost', { method: 'POST' }),
+      params(LEAD_ID),
+    );
+    expect(response.status).toBe(503);
+    expect((await response.json()).error.code).toBe('enrichment_not_configured');
+  });
+
+  it('fills only empty fields and asks for phones through a tokenised webhook', async () => {
+    signIn();
+    process.env.APOLLO_API_KEY = 'apollo-key';
+    process.env.APP_URL = 'https://app.example';
+    tableRows.leads = [
+      lead({ email: null, phone: null, mobile_phone: null, industry: 'Typed by user' }),
+    ];
+    tableRows.enrichment_requests = [{ id: 'req-1' }];
+    const fetchMock = vi.fn().mockResolvedValue(
+      apolloResponse({
+        person: {
+          email: 'mette@nordlys.dk',
+          email_status: 'verified',
+          organization: { industry: 'energy' },
+        },
+      }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const response = await enrichLead(
+      new Request('http://localhost', { method: 'POST' }),
+      params(LEAD_ID),
+    );
+    expect(response.status).toBe(200);
+    const body = (await response.json()).data;
+    expect(body).toMatchObject({ found: true, filled: ['email'], phonePending: true });
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toMatch(/^https:\/\/api\.apollo\.io\/api\/v1\/people\/match\?/);
+    const query = new URL(url).searchParams;
+    expect(query.get('reveal_phone_number')).toBe('true');
+    expect(query.get('webhook_url')).toMatch(
+      /^https:\/\/app\.example\/api\/webhooks\/apollo\/[0-9a-f]{64}$/,
+    );
+    expect(new Headers(init.headers).get('X-Api-Key')).toBe('apollo-key');
+
+    const leadUpdate = recorded.find((q) => q.table === 'leads' && q.operation === 'update');
+    expect(leadUpdate?.payload).toMatchObject({
+      email: 'mette@nordlys.dk',
+      enrichment_status: 'found',
+    });
+    expect(leadUpdate?.payload).not.toHaveProperty('industry');
+    expect(leadUpdate?.filters).toEqual({ id: LEAD_ID, user_id: USER_ID });
+  });
+
+  it('refuses to look up a do-not-contact lead', async () => {
+    signIn();
+    process.env.APOLLO_API_KEY = 'apollo-key';
+    tableRows.leads = [lead({ status: 'do_not_contact' })];
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const response = await enrichLead(
+      new Request('http://localhost', { method: 'POST' }),
+      params(LEAD_ID),
+    );
+    expect(response.status).toBe(409);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('the webhook rejects a malformed or unknown token', async () => {
+    const bad = await apolloWebhook(
+      new Request('http://localhost', { method: 'POST', body: '{}' }),
+      {
+        params: Promise.resolve({ token: 'not-a-token' }),
+      },
+    );
+    expect(bad.status).toBe(404);
+    expect(recorded).toHaveLength(0);
+
+    tableRows.enrichment_requests = [];
+    const unknown = await apolloWebhook(
+      new Request('http://localhost', { method: 'POST', body: '{}' }),
+      {
+        params: Promise.resolve({ token: TOKEN }),
+      },
+    );
+    expect(unknown.status).toBe(404);
+  });
+
+  it("the webhook fills only that lead's empty phone fields", async () => {
+    tableRows.enrichment_requests = [
+      {
+        id: 'req-1',
+        user_id: USER_ID,
+        lead_id: LEAD_ID,
+        phone_requested: true,
+        webhook_token: TOKEN,
+      },
+    ];
+    tableRows.leads = [lead({ phone: '+45 11 11 11 11', mobile_phone: null })];
+    const payload = {
+      people: [
+        {
+          phone_numbers: [
+            { sanitized_number: '+4520304050', type_cd: 'mobile' },
+            { sanitized_number: '+4570203040', type_cd: 'work' },
+          ],
+        },
+      ],
+    };
+    const response = await apolloWebhook(
+      new Request('http://localhost', { method: 'POST', body: JSON.stringify(payload) }),
+      { params: Promise.resolve({ token: TOKEN }) },
+    );
+    expect(response.status).toBe(200);
+
+    const lookup = recorded.find(
+      (q) => q.table === 'enrichment_requests' && q.operation === 'select',
+    );
+    expect(lookup?.filters).toEqual({ webhook_token: TOKEN });
+    const leadUpdate = recorded.find((q) => q.table === 'leads' && q.operation === 'update');
+    expect(leadUpdate?.payload).toMatchObject({ mobile_phone: '+4520304050' });
+    expect(leadUpdate?.payload).not.toHaveProperty('phone');
+    expect(leadUpdate?.filters).toEqual({ id: LEAD_ID, user_id: USER_ID });
+    const done = recorded.find(
+      (q) => q.table === 'enrichment_requests' && q.operation === 'update',
+    );
+    expect(done?.payload).toMatchObject({ status: 'completed', webhook_payload: payload });
   });
 });

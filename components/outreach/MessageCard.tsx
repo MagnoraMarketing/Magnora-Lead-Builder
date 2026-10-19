@@ -11,7 +11,13 @@ import {
   MESSAGE_STATUS_LABELS,
   MESSAGE_STATUS_STYLES,
 } from '@/lib/constants/outreach';
-import { allowedActions, canEditBody, type MessageAction } from '@/lib/outreach/lifecycle';
+import { formatDateTime, fromLocalInput, toLocalInput } from '@/lib/datetime';
+import {
+  allowedActions,
+  canEditBody,
+  canSchedule,
+  type MessageAction,
+} from '@/lib/outreach/lifecycle';
 import type { OutreachMessage, OutreachMessageWithLead } from '@/types/database';
 
 const ACTION_LABELS: Record<MessageAction, string> = {
@@ -44,6 +50,8 @@ export function MessageCard({
   const [copied, setCopied] = useState(false);
   const [confirmSent, setConfirmSent] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [scheduleValue, setScheduleValue] = useState(toLocalInput(message.scheduled_for));
 
   const lead = 'lead' in message ? message.lead : null;
   const max = MESSAGE_MAX_LENGTH[message.channel];
@@ -105,7 +113,15 @@ export function MessageCard({
         </Badge>
         <span className="text-xs text-slate-500">{MESSAGE_CHANNEL_LABELS[message.channel]}</span>
         <span className="text-xs text-slate-400">
-          · {message.source === 'ai' ? (message.edited ? 'AI draft, edited' : 'AI draft') : 'Written by hand'}
+          ·{' '}
+          {message.source === 'ai'
+            ? message.edited
+              ? 'AI draft, edited'
+              : 'AI draft'
+            : 'Written by hand'}
+          {message.kind === 'follow_up' &&
+            ` · Follow-up${message.sequence_step ? ` ${message.sequence_step - 1}` : ''}`}
+          {message.kind === 'reply' && ' · Reply'}
         </span>
         {lead && (
           <Link
@@ -147,7 +163,9 @@ export function MessageCard({
           </p>
         </div>
       ) : (
-        <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-800">{message.body}</p>
+        <p className="mt-3 whitespace-pre-wrap break-words text-sm text-slate-800">
+          {message.body}
+        </p>
       )}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -227,6 +245,68 @@ export function MessageCard({
         <p className="mt-2 text-xs text-slate-500">
           Marked as sent {new Date(message.sent_at).toLocaleString('en-GB')}
         </p>
+      )}
+
+      {canSchedule(message.status) && !editing && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
+          {scheduling ? (
+            <>
+              <label htmlFor={`schedule-${message.id}`} className="sr-only">
+                Planned send time
+              </label>
+              <input
+                id={`schedule-${message.id}`}
+                type="datetime-local"
+                value={scheduleValue}
+                onChange={(e) => setScheduleValue(e.target.value)}
+                className="field-input w-auto py-1 text-xs"
+              />
+              <Button
+                size="sm"
+                loading={busy}
+                onClick={async () => {
+                  if (
+                    await send({ action: 'schedule', scheduledFor: fromLocalInput(scheduleValue) })
+                  ) {
+                    setScheduling(false);
+                  }
+                }}
+              >
+                Save time
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setScheduling(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <>
+              <span>
+                {message.scheduled_for
+                  ? `Planned for ${formatDateTime(message.scheduled_for)}`
+                  : 'No send time planned'}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setScheduleValue(toLocalInput(message.scheduled_for));
+                  setScheduling(true);
+                }}
+                className="font-medium text-brand-700 hover:underline"
+              >
+                {message.scheduled_for ? 'Change' : 'Plan send time'}
+              </button>
+              {message.scheduled_for && (
+                <button
+                  type="button"
+                  onClick={() => void send({ action: 'schedule', scheduledFor: null })}
+                  className="text-slate-400 hover:text-slate-600"
+                >
+                  Clear
+                </button>
+              )}
+            </>
+          )}
+        </div>
       )}
 
       <Modal
