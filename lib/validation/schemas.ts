@@ -219,6 +219,10 @@ export const generateMessageSchema = z.object({
   channel: messageChannel.default('connection_request'),
   /** One-off guidance for this draft, e.g. "mention we are both in Aarhus". */
   instructions: z.string().trim().max(500, 'Keep instructions under 500 characters').optional(),
+  /** Omitted: worked out from the conversation (first message, follow-up or reply). */
+  kind: z.enum(['initial', 'follow_up', 'reply']).optional(),
+  /** Draft the message for this planned follow-up; its topic, channel and date apply. */
+  taskId: z.string().uuid().optional(),
 });
 
 export type GenerateMessageInput = z.infer<typeof generateMessageSchema>;
@@ -235,6 +239,8 @@ export const updateMessageSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('mark_sent') }),
   z.object({ action: z.literal('archive') }),
   z.object({ action: z.literal('restore') }),
+  /** When the user intends to send it. Null clears it. */
+  z.object({ action: z.literal('schedule'), scheduledFor: z.string().datetime({ offset: true }).nullable() }),
 ]);
 
 export type UpdateMessageInput = z.infer<typeof updateMessageSchema>;
@@ -301,3 +307,54 @@ export const builderSaveSchema = z
   .refine(fitsChannel, connectionNoteTooLong);
 
 export type BuilderSaveInput = z.infer<typeof builderSaveSchema>;
+
+// ---------------------------------------------------------------------------
+//  Follow-up sequences, planned follow-ups, replies, enrichment
+// ---------------------------------------------------------------------------
+
+/** PUT /api/campaigns/[id]/steps — the whole sequence after the first message. */
+export const campaignStepsSchema = z.object({
+  steps: z
+    .array(
+      z.object({
+        delayDays: z
+          .number()
+          .int('Days must be a whole number')
+          .min(1, 'At least 1 day')
+          .max(90, 'At most 90 days'),
+        topic: z.preprocess(
+          blankToUndefined,
+          z.string().trim().max(500, 'Keep the topic under 500 characters').optional(),
+        ),
+        channel: messageChannel.default('direct_message'),
+      }),
+    )
+    .max(9, 'At most 9 follow-ups'),
+});
+
+const isoDateTime = z.string().datetime({ offset: true, message: 'Must be a date and time' });
+
+/** POST /api/followups — plan a follow-up for one lead by hand. */
+export const createFollowUpSchema = z.object({
+  leadId: z.string().uuid(),
+  dueAt: isoDateTime,
+  topic: z.preprocess(blankToUndefined, z.string().trim().max(500).optional()),
+  channel: messageChannel.default('direct_message'),
+});
+
+/** PATCH /api/followups/[id] */
+export const updateFollowUpSchema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('skip') }),
+  z.object({ action: z.literal('reschedule'), dueAt: isoDateTime }),
+]);
+
+/** GET /api/followups and /api/today — `until` is the end of the user's local day. */
+export const todayQuerySchema = z.object({
+  until: isoDateTime.optional(),
+});
+
+/** POST /api/leads/[id]/replies — what the lead wrote back. */
+export const createReplySchema = z.object({
+  body: z.string().trim().min(1, 'Paste the reply').max(8000, 'The reply is too long'),
+  receivedAt: z.preprocess(blankToUndefined, isoDateTime.optional()),
+});

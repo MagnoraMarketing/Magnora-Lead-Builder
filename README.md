@@ -177,7 +177,7 @@ supabase link --project-ref <your-ref>
 supabase db push
 ```
 
-Or run the five files in `supabase/migrations/` **in numeric order** in the
+Or run the six files in `supabase/migrations/` **in numeric order** in the
 Supabase SQL editor (Database → SQL Editor → New query, paste, Run):
 
 | File | Creates |
@@ -187,12 +187,13 @@ Supabase SQL editor (Database → SQL Editor → New query, paste, Run):
 | `0003_job_queue.sql` | `claim_next_job`, `job_heartbeat`, `finish_job`, `upsert_lead` |
 | `0004_stats_and_rate_limit.sql` | `dashboard_stats`, the API rate-limit table and function |
 | `0005_campaigns_and_outreach.sql` | `campaigns`, `outreach_messages`, `leads.campaign_id`, the message-lifecycle trigger, `outreach_stats`, `campaign_summaries`, `import_leads` |
+| `0006_followups_replies_enrichment.sql` | `campaign_steps`, `follow_up_tasks`, `lead_replies`, `enrichment_requests`, planned send times, and the triggers that plan the next follow-up and stop a sequence on a reply |
 
 `0005` is purely additive — no table, column or row is dropped or rewritten —
 so it is safe on a database that already holds leads. It needs PostgreSQL 15+
 (Supabase runs 17).
 
-Or paste all five at once. `scripts/build-setup-sql.sh` concatenates them into
+Or paste them all at once. `scripts/build-setup-sql.sh` concatenates them into
 a single `supabase-setup.sql` you can run in one go:
 
 ```bash
@@ -685,10 +686,47 @@ reported by line number and skipped. Valid rows go through `import_leads()`,
 which runs as you (RLS applies) and lets the same three duplicate-detection
 indexes skip leads you already have — an import never overwrites a lead.
 
+## 13c. Follow-ups, replies and Today
+
+Outreach is **semi-automatic**: the app plans and drafts, you send.
+
+- **Campaign sequence** (`/campaigns/[id]` → Follow-up sequence): e.g.
+  "3 days later: short reminder", "7 days later: share a result". Step 1 is
+  the first message.
+- When you **mark a message as sent**, the next step is planned for that lead
+  automatically (`follow_up_tasks`), due N days after the send.
+- **Today** (`/today`) lists follow-ups due today (draft each with AI, write
+  it yourself, or skip), replies waiting for an answer, and approved messages
+  planned for today.
+- On a lead, **paste their reply** into the Conversation panel. That stops the
+  lead's planned follow-ups, and "Draft with AI" then writes a *reply* using the
+  whole conversation. A final lead status (interested, meeting, not
+  interested, invalid, do not contact) stops the sequence too.
+- **Plan follow-up** on a lead sets one by hand, at any time and topic.
+- Any draft can be given a **planned send time**.
+
+Nothing is sent to LinkedIn by the app, and the inbox is not read — both
+would break LinkedIn's terms and risk the account.
+
 ## 14. Enrichment
 
-> **Not in use in this deployment.** No enrichment vendor is connected, and
-> none is planned. See `CLAUDE.md`.
+**Apollo.io**, optional: set `APOLLO_API_KEY` on Vercel. "Find email & phone"
+on a lead calls People Enrichment with the name, company, website domain and
+LinkedIn URL.
+
+- A **verified** email and company details are applied immediately. Apollo's
+  "guessed" emails and locked placeholders are never stored.
+- **Phone numbers** arrive minutes later at `/api/webhooks/apollo/<token>`
+  (Apollo requires a webhook for phones). The token is random per lookup and
+  can only fill that lead's empty phone fields. Vercel Authentication blocks
+  Apollo unless **Protection Bypass for Automation** is enabled (the app adds
+  the bypass secret to the webhook URL automatically) or a custom domain is
+  used.
+- Only empty fields are filled; nothing you typed is overwritten. Each lookup
+  is logged in `enrichment_requests`, including the raw webhook payload.
+
+Leads are personal data: you need a lawful basis (GDPR) for enriching them,
+and Danish law (markedsføringsloven §10) restricts unsolicited email marketing.
 
 `email`, `phone` and `mobile_phone` are `null` unless LinkedIn actually
 published them. **The scraper never invents contact data** — it does not build
@@ -697,10 +735,8 @@ phone number is read only from an explicit `tel:` link, and email addresses are
 filtered against a list of asset and vendor domains that produce email-shaped
 false positives.
 
-To fill those gaps, implement `EnrichmentProvider`
-(`lib/integrations/enrichment/index.ts`) against a real data vendor and register
-it with `setEnrichmentProvider()`. The default provider resolves nothing and
-reports that honestly.
+Apollo (above) is how those gaps are filled. Another vendor can be added by
+implementing `EnrichmentProvider` (`lib/integrations/enrichment/index.ts`).
 
 ---
 

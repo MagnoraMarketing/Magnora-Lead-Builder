@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { CampaignForm } from '@/components/campaigns/CampaignForm';
+import { SequenceEditor } from '@/components/campaigns/SequenceEditor';
 import { Modal } from '@/components/ui/Modal';
 import { Alert, Button, Card, CardBody, CardHeader, StatCard } from '@/components/ui';
 import { ApiRequestError, apiFetch } from '@/lib/api/client';
@@ -55,6 +56,8 @@ export function CampaignDetail({
           <Button variant="secondary">View messages</Button>
         </Link>
       </div>
+
+      <SequenceEditor campaignId={campaign.id} />
 
       <Card>
         <CardHeader

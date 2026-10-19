@@ -12,16 +12,20 @@ import {
   validationError,
 } from '@/lib/api/response';
 import { isAiConfigured } from '@/lib/env';
-import { AI_ERROR_STATUS, aiNotConfigured, doNotContact } from '@/lib/outreach/api';
+import { AI_ERROR_STATUS, aiNotConfigured, draftContextFailure } from '@/lib/outreach/api';
+import { inferKind, loadDraftContext } from '@/lib/outreach/context';
+import type { OutreachKind } from '@/lib/outreach/prompt';
 import { generateMessageSchema } from '@/lib/validation/schemas';
-import type { Campaign, Lead, OutreachMessage } from '@/types/database';
+import type { FollowUpTask, OutreachMessage } from '@/types/database';
 
 /**
  * POST /api/messages/generate — drafts a LinkedIn message with AI and saves it
- * as a draft. The draft is never approved or sent automatically.
+ * as a draft: a first message, a follow-up (optionally for a planned
+ * follow-up task), or a reply to what the lead wrote. The draft is never
+ * approved or sent automatically.
  *
- * Personalisation uses only what is stored: the lead's fields and the
- * campaign's sender context. Nothing is looked up elsewhere.
+ * Personalisation uses only what is stored: the lead's fields, the campaign's
+ * sender context, and the conversation the user has recorded.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -39,39 +43,45 @@ export async function POST(request: NextRequest) {
     if (!parsed.success) return validationError(parsed.error);
     const input = parsed.data;
 
-    const { data: lead, error: leadError } = await supabase
-      .from('leads')
-      .select('*')
-      .eq('id', input.leadId)
-      .eq('user_id', user.id)
-      .maybeSingle<Lead>();
-
-    if (leadError) return serverError('messages:generate:lead', leadError);
-    if (!lead) return notFound('Lead');
-    if (lead.status === 'do_not_contact') return doNotContact();
-
-    // An explicit choice wins, including an explicit "no campaign" (null).
-    const campaignId = input.campaignId === undefined ? lead.campaign_id : input.campaignId;
-    let campaign: Campaign | null = null;
-    if (campaignId) {
+    let task: FollowUpTask | null = null;
+    if (input.taskId) {
       const { data, error } = await supabase
-        .from('campaigns')
+        .from('follow_up_tasks')
         .select('*')
-        .eq('id', campaignId)
+        .eq('id', input.taskId)
         .eq('user_id', user.id)
-        .maybeSingle<Campaign>();
-      if (error) return serverError('messages:generate:campaign', error);
-      if (!data) return notFound('Campaign');
-      campaign = data;
+        .eq('lead_id', input.leadId)
+        .maybeSingle<FollowUpTask>();
+      if (error) return serverError('messages:generate:task', error);
+      if (!data) return notFound('Follow-up');
+      if (data.status !== 'pending') {
+        return fail('task_not_pending', 'This follow-up already has a draft or is closed.', 409);
+      }
+      task = data;
     }
+
+    const context = await loadDraftContext(
+      supabase,
+      user.id,
+      input.leadId,
+      input.campaignId === undefined ? (task?.campaign_id ?? undefined) : input.campaignId,
+    );
+    if (!context.ok) return draftContextFailure(context, 'messages:generate:context');
+    const { lead, campaign, conversation } = context;
+
+    const kind: OutreachKind = task ? 'follow_up' : (input.kind ?? inferKind(conversation));
+    const channel = task?.channel ?? input.channel;
 
     let generated;
     try {
       generated = await generateOutreachMessage({
         lead,
         campaign,
-        channel: input.channel,
+        channel,
         instructions: input.instructions,
+        kind,
+        topic: task?.topic,
+        conversation,
       });
     } catch (error) {
       if (error instanceof AiGenerationError) {
@@ -86,15 +96,27 @@ export async function POST(request: NextRequest) {
         user_id: user.id,
         lead_id: lead.id,
         campaign_id: campaign?.id ?? null,
-        channel: input.channel,
+        channel,
         body: generated.body,
         source: 'ai',
         ai_model: generated.model,
+        kind,
+        sequence_step: task?.step_number ?? null,
+        scheduled_for: task?.due_at ?? null,
       })
       .select()
       .single<OutreachMessage>();
 
-    if (error) return serverError('messages:generate:save', error);
+    if (error || !data) return serverError('messages:generate:save', error);
+
+    if (task) {
+      const { error: taskError } = await supabase
+        .from('follow_up_tasks')
+        .update({ status: 'drafted', message_id: data.id })
+        .eq('id', task.id)
+        .eq('user_id', user.id);
+      if (taskError) return serverError('messages:generate:task-link', taskError);
+    }
 
     return ok({ message: data }, 201);
   } catch (error) {

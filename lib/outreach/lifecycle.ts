@@ -41,6 +41,11 @@ export function allowedActions(current: MessageStatus): MessageAction[] {
   );
 }
 
+/** A planned send time can be set or cleared until the message is sent. */
+export function canSchedule(current: MessageStatus): boolean {
+  return current !== 'sent';
+}
+
 /** Text can be edited until the message is sent. Editing an approved one re-drafts it. */
 export function canEditBody(current: MessageStatus): boolean {
   return current !== 'sent';
