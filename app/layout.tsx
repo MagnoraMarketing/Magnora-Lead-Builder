@@ -3,10 +3,10 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: {
-    default: 'LinkedIn Lead Finder',
-    template: '%s · LinkedIn Lead Finder',
+    default: 'Magnora Lead Builder',
+    template: '%s · Magnora Lead Builder',
   },
-  description: 'Find and manage B2B leads from LinkedIn.',
+  description: 'Find B2B leads on LinkedIn and draft personalised outreach.',
   robots: { index: false, follow: false },
 };
 
