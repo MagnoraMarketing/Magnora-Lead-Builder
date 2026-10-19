@@ -746,6 +746,12 @@ number or, failing that, by exact company name. When the name is ambiguous the
 candidates are shown and you choose; nothing is guessed. Values you already
 have are never overwritten. Each lookup is logged in `enrichment_requests`.
 
+**From a LinkedIn search to drafted messages:** "Enrich & message" on a
+finished search opens its leads with all of them selected. "Fetch from CVR"
+and "Draft with AI" then run for every selected lead, one at a time, with
+progress shown. Drafts land in Messages; you approve, copy, send on LinkedIn
+and mark each as sent — nothing is sent automatically.
+
 **Reklamebeskyttelse** is always respected: protected companies are excluded
 from every search, re-checked on import, and refused by "Fetch from CVR".
 

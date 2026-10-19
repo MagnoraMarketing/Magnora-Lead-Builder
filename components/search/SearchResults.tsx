@@ -87,9 +87,7 @@ export function SearchResults({
                 Export CSV
               </Button>
               <Link href={`/leads?jobId=${jobId}`}>
-                <Button variant="secondary" size="sm">
-                  Open in Leads
-                </Button>
+                <Button size="sm">Enrich &amp; message</Button>
               </Link>
             </div>
           ) : undefined
