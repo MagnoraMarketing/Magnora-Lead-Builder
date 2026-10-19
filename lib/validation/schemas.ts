@@ -62,6 +62,10 @@ export const updateLeadSchema = z
     email: z.string().trim().email('Must be a valid email address').max(320).nullable(),
     phone: z.string().trim().max(50).nullable(),
     mobile_phone: z.string().trim().max(50).nullable(),
+    cvr_number: z.string().trim().regex(/^\d{8}$/, 'A CVR number has 8 digits').nullable(),
+    company_address: z.string().trim().max(300).nullable(),
+    company_phone: z.string().trim().max(50).nullable(),
+    company_email: z.string().trim().email('Must be a valid email address').max(320).nullable(),
     status: z.enum(LEAD_STATUSES),
     notes: z.string().max(10000).nullable(),
     campaign_id: z.string().uuid().nullable(),
@@ -357,4 +361,36 @@ export const todayQuerySchema = z.object({
 export const createReplySchema = z.object({
   body: z.string().trim().min(1, 'Paste the reply').max(8000, 'The reply is too long'),
   receivedAt: z.preprocess(blankToUndefined, isoDateTime.optional()),
+});
+
+// ---------------------------------------------------------------------------
+//  CVR (Danish company register)
+// ---------------------------------------------------------------------------
+
+const cvrNumber = z.string().regex(/^\d{8}$/, 'A CVR number has 8 digits');
+
+export const cvrSearchSchema = z
+  .object({
+    branche: z.string().max(500).default(''),
+    kommunekoder: z.array(z.number().int().min(100).max(999)).max(99).default([]),
+    postnumre: z.string().max(500).default(''),
+    employeeIntervals: z.array(z.string().regex(/^ANTAL_\d+_\d+$/)).max(20).default([]),
+    formkoder: z.array(z.number().int().min(1).max(999)).max(20).default([]),
+    minAgeYears: z.number().int().min(0).max(200).nullable().optional(),
+    maxAgeYears: z.number().int().min(0).max(200).nullable().optional(),
+    page: z.number().int().min(0).max(200).default(0),
+  })
+  .refine((v) => v.minAgeYears == null || v.maxAgeYears == null || v.minAgeYears <= v.maxAgeYears, {
+    message: 'Minimum age must not be above maximum age',
+    path: ['maxAgeYears'],
+  });
+
+export const cvrImportSchema = z.object({
+  cvrNumbers: z.array(cvrNumber).min(1, 'Choose at least one company').max(50, 'At most 50 companies at a time'),
+  campaignId: z.string().uuid().nullable().optional(),
+});
+
+export const cvrEnrichSchema = z.object({
+  /** Given when the user picked the company; otherwise the lead's own CVR number or name is used. */
+  cvrNumber: cvrNumber.optional(),
 });

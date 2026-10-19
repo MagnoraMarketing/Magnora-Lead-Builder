@@ -16,6 +16,11 @@ export const CSV_COLUMNS = [
   'Mobile',
   'Status',
   'Notes',
+  // Appended for CVR leads, so the columns above keep their positions.
+  'CVR',
+  'Company Address',
+  'Company Phone',
+  'Company Email',
 ] as const;
 
 /**
@@ -55,6 +60,10 @@ export function leadToCsvRow(lead: Lead): string[] {
     lead.mobile_phone ?? '',
     LEAD_STATUS_LABELS[lead.status] ?? lead.status,
     lead.notes ?? '',
+    lead.cvr_number ?? '',
+    lead.company_address ?? '',
+    lead.company_phone ?? '',
+    lead.company_email ?? '',
   ];
 }
 

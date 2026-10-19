@@ -7,6 +7,7 @@ import { cx } from '@/components/ui';
 const NAV = [
   { href: '/builder', label: 'Lead Builder', icon: SparkIcon },
   { href: '/today', label: 'Today', icon: CalendarIcon },
+  { href: '/cvr', label: 'Find in CVR', icon: BuildingIcon },
   { href: '/search', label: 'Search', icon: SearchIcon },
   { href: '/dashboard', label: 'Dashboard', icon: GridIcon },
   { href: '/leads', label: 'Leads', icon: UsersIcon },
@@ -62,6 +63,18 @@ function SparkIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
       <path d="M10 2l1.8 4.7L16.5 8.5l-4.7 1.8L10 15l-1.8-4.7L3.5 8.5l4.7-1.8L10 2zm6 10l.9 2.1L19 15l-2.1.9L16 18l-.9-2.1L13 15l2.1-.9L16 12z" />
+    </svg>
+  );
+}
+
+function BuildingIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+      <path
+        fillRule="evenodd"
+        d="M4 3a1 1 0 011-1h7a1 1 0 011 1v4h2a1 1 0 011 1v9h1a1 1 0 110 2H3a1 1 0 110-2h1V3zm2 2v2h2V5H6zm4 0v2h1V5h-1zM6 9v2h2V9H6zm4 0v2h1V9h-1zm-4 4v2h2v-2H6zm4 0v4h1v-4h-1zm3-4v8h1V9h-1z"
+        clipRule="evenodd"
+      />
     </svg>
   );
 }

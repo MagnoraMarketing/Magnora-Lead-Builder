@@ -25,9 +25,23 @@ const EDITABLE_FIELDS = [
   { key: 'email', label: 'Email', type: 'email' },
   { key: 'phone', label: 'Phone', type: 'tel' },
   { key: 'mobile_phone', label: 'Mobile', type: 'tel' },
+  { key: 'cvr_number', label: 'CVR number', type: 'text' },
+  { key: 'company_address', label: 'Company address', type: 'text' },
+  { key: 'company_phone', label: 'Company phone', type: 'tel' },
+  { key: 'company_email', label: 'Company email', type: 'email' },
 ] as const;
 
 type EditableKey = (typeof EDITABLE_FIELDS)[number]['key'];
+
+interface CvrCandidate {
+  cvrNumber: string;
+  name: string;
+  city: string | null;
+  reklamebeskyttet: boolean;
+}
+
+const fieldLabel = (key: string) =>
+  EDITABLE_FIELDS.find((f) => f.key === key)?.label.toLowerCase() ?? key;
 
 export function LeadDetail({ initialLead }: { initialLead: Lead }) {
   const router = useRouter();
@@ -46,6 +60,7 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
     tone: 'success' | 'info' | 'error';
     text: string;
   } | null>(null);
+  const [cvrCandidates, setCvrCandidates] = useState<CvrCandidate[]>([]);
 
   function startEditing() {
     const next: Record<string, string> = {};
@@ -124,31 +139,46 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
     }
   }
 
-  async function enrich() {
+  /**
+   * Fills empty company fields from CVR. Without a CVR number the company is
+   * matched by exact name; when that is ambiguous the user picks from the
+   * candidates and the lookup runs again with the chosen number.
+   */
+  async function enrichFromCvr(cvrNumber?: string) {
     setEnriching(true);
     setEnrichNote(null);
+    setCvrCandidates([]);
     try {
-      const data = await apiFetch<{
-        lead: Lead;
-        found: boolean;
-        filled: string[];
-        phonePending: boolean;
-      }>(`/api/leads/${lead.id}/enrich`, { method: 'POST' });
-      setLead(data.lead);
-      const parts: string[] = [];
-      if (!data.found) parts.push('Apollo found no match for this person.');
-      else if (data.filled.length > 0) parts.push(`Filled in: ${data.filled.join(', ')}.`);
-      else
-        parts.push(
-          'Apollo matched the person but had nothing new (only verified emails are used).',
-        );
-      if (data.phonePending)
-        parts.push('Phone numbers arrive within a few minutes — reload to see them.');
-      setEnrichNote({ tone: data.found ? 'success' : 'info', text: parts.join(' ') });
+      const data = await apiFetch<
+        | { outcome: 'found'; lead: Lead; company: { cvrNumber: string; name: string }; filled: string[] }
+        | { outcome: 'choose'; candidates: CvrCandidate[] }
+        | { outcome: 'not_found' }
+      >(`/api/leads/${lead.id}/cvr`, {
+        method: 'POST',
+        body: JSON.stringify(cvrNumber ? { cvrNumber } : {}),
+      });
+      if (data.outcome === 'found') {
+        setLead(data.lead);
+        setEnrichNote({
+          tone: 'success',
+          text:
+            data.filled.length > 0
+              ? `Matched ${data.company.name} (CVR ${data.company.cvrNumber}). Filled in: ${data.filled.map(fieldLabel).join(', ')}.`
+              : `Matched ${data.company.name} (CVR ${data.company.cvrNumber}). Nothing new: the fields were already filled.`,
+        });
+      } else if (data.outcome === 'choose') {
+        setCvrCandidates(data.candidates);
+        setEnrichNote({ tone: 'info', text: 'Several companies match the name. Choose the right one:' });
+      } else {
+        setEnrichNote({
+          tone: 'info',
+          text: 'No active company in CVR matches this name. Add the CVR number under Edit and try again.',
+        });
+      }
     } catch (err) {
       setEnrichNote({
         tone: 'error',
-        text: err instanceof ApiRequestError ? err.message : 'The contact lookup failed.',
+        text: err instanceof ApiRequestError ? err.message : 'The CVR lookup failed.',
       });
     } finally {
       setEnriching(false);
@@ -191,11 +221,11 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => void enrich()}
+                    onClick={() => void enrichFromCvr()}
                     loading={enriching}
                     disabled={lead.status === 'do_not_contact'}
                   >
-                    Find email &amp; phone
+                    Fetch from CVR
                   </Button>
                   <Button variant="secondary" size="sm" onClick={startEditing}>
                     Edit
@@ -213,6 +243,28 @@ export function LeadDetail({ initialLead }: { initialLead: Lead }) {
           {enrichNote && (
             <div className="mb-4">
               <Alert tone={enrichNote.tone}>{enrichNote.text}</Alert>
+              {cvrCandidates.length > 0 && (
+                <ul className="mt-2 space-y-1">
+                  {cvrCandidates.map((c) => (
+                    <li key={c.cvrNumber} className="flex flex-wrap items-center gap-2 text-sm">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        disabled={c.reklamebeskyttet || enriching}
+                        onClick={() => void enrichFromCvr(c.cvrNumber)}
+                      >
+                        Use
+                      </Button>
+                      <span className="font-medium text-slate-800">{c.name}</span>
+                      <span className="text-slate-500">
+                        CVR {c.cvrNumber}
+                        {c.city ? ` · ${c.city}` : ''}
+                      </span>
+                      {c.reklamebeskyttet && <Badge>Reklamebeskyttet</Badge>}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           )}
           {editing ? (

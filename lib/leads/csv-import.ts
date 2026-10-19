@@ -33,6 +33,10 @@ export const IMPORT_FIELDS = [
   'mobile_phone',
   'status',
   'notes',
+  'cvr_number',
+  'company_address',
+  'company_phone',
+  'company_email',
 ] as const;
 
 export type ImportField = (typeof IMPORT_FIELDS)[number];
@@ -56,6 +60,10 @@ const HEADER_ALIASES: Record<ImportField, string[]> = {
   mobile_phone: ['mobile', 'mobile phone', 'cell', 'mobil', 'mobilnummer'],
   status: ['status'],
   notes: ['notes', 'note', 'noter', 'comments', 'kommentar'],
+  cvr_number: ['cvr', 'cvr number', 'cvr nummer', 'cvr-nummer', 'cvrnr'],
+  company_address: ['company address', 'address', 'adresse', 'firmaadresse'],
+  company_phone: ['company phone', 'firmatelefon', 'virksomhedens telefon'],
+  company_email: ['company email', 'company e-mail', 'firmamail', 'virksomhedens e-mail'],
 };
 
 function normalizeHeader(header: string): string {
@@ -166,6 +174,10 @@ const importRowSchema = z.object({
   mobile_phone: optional(50),
   status: z.enum(LEAD_STATUSES),
   notes: optional(10000),
+  cvr_number: z.string().regex(/^\d{8}$/, 'A CVR number has 8 digits').nullable(),
+  company_address: optional(300),
+  company_phone: optional(50),
+  company_email: z.string().email('Must be a valid email address').max(320).nullable(),
 });
 
 export type ImportRow = z.infer<typeof importRowSchema>;
@@ -253,6 +265,10 @@ export function parseLeadImport(text: string): ParsedImport {
       mobile_phone: raw.mobile_phone ?? null,
       status: status ?? '',
       notes: raw.notes ?? null,
+      cvr_number: raw.cvr_number ? raw.cvr_number.replace(/^DK/i, '').replace(/\s+/g, '') : null,
+      company_address: raw.company_address ?? null,
+      company_phone: raw.company_phone ?? null,
+      company_email: raw.company_email ?? null,
     };
 
     const parsed = importRowSchema.safeParse(candidate);

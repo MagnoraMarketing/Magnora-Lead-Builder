@@ -32,7 +32,8 @@ replacing them.
 13. [Connecting a dialer](#13-connecting-a-dialer)
 13a. [Campaigns and AI outreach](#13a-campaigns-and-ai-outreach)
 13b. [Importing leads from CSV](#13b-importing-leads-from-csv)
-14. [Enrichment](#14-enrichment)
+13c. [Follow-ups, replies and Today](#13c-follow-ups-replies-and-today)
+14. [Enrichment: CVR](#14-enrichment-cvr)
 15. [Troubleshooting](#15-troubleshooting)
 16. [Legal and ethical use](#16-legal-and-ethical-use)
 
@@ -126,6 +127,7 @@ reads `worker/.env`.
 | `SUPABASE_SERVICE_ROLE_KEY` | yes | The `sb_secret_…` secret key (or legacy `service_role` key). **Bypasses RLS.** Server-side only. Never add a `NEXT_PUBLIC_` prefix. |
 | `ANTHROPIC_API_KEY` | no | Enables "Draft with AI". Server-side only. Without it the app runs and messages can be written by hand; the generate endpoint answers `ai_not_configured`. |
 | `OUTREACH_AI_MODEL` | no | Model for drafts. Defaults to `claude-opus-5-5`. |
+| `CVR_USERNAME`, `CVR_PASSWORD` | no | Free system-to-system access to the Danish company register (request it at cvrselvbetjening@erst.dk). Enables "Find in CVR" and "Fetch from CVR". Server-side only. |
 
 The web app does **not** get `LINKEDIN_EMAIL` or `LINKEDIN_PASSWORD`. It has no
 use for them, so it is never given them.
@@ -177,7 +179,7 @@ supabase link --project-ref <your-ref>
 supabase db push
 ```
 
-Or run the six files in `supabase/migrations/` **in numeric order** in the
+Or run the seven files in `supabase/migrations/` **in numeric order** in the
 Supabase SQL editor (Database → SQL Editor → New query, paste, Run):
 
 | File | Creates |
@@ -188,6 +190,7 @@ Supabase SQL editor (Database → SQL Editor → New query, paste, Run):
 | `0004_stats_and_rate_limit.sql` | `dashboard_stats`, the API rate-limit table and function |
 | `0005_campaigns_and_outreach.sql` | `campaigns`, `outreach_messages`, `leads.campaign_id`, the message-lifecycle trigger, `outreach_stats`, `campaign_summaries`, `import_leads` |
 | `0006_followups_replies_enrichment.sql` | `campaign_steps`, `follow_up_tasks`, `lead_replies`, `enrichment_requests`, planned send times, and the triggers that plan the next follow-up and stop a sequence on a reply |
+| `0007_cvr.sql` | CVR columns on `leads` (`cvr_number`, `cvr_person_id`, `company_address`, `company_phone`, `company_email`), a duplicate index per CVR person, `import_cvr_leads`, and `import_leads` taking the new columns |
 
 `0005` is purely additive — no table, column or row is dropped or rewritten —
 so it is safe on a database that already holds leads. It needs PostgreSQL 15+
@@ -708,24 +711,55 @@ Outreach is **semi-automatic**: the app plans and drafts, you send.
 Nothing is sent to LinkedIn by the app, and the inbox is not read — both
 would break LinkedIn's terms and risk the account.
 
-## 14. Enrichment
+## 14. Enrichment: CVR
 
-**Apollo.io**, optional: set `APOLLO_API_KEY` on Vercel. "Find email & phone"
-on a lead calls People Enrichment with the name, company, website domain and
-LinkedIn URL.
+The Danish company register (CVR) is the data source. It is free and it is
+the register itself — Proff, Lasso and similar services resell the same data.
+Their websites must not be scraped (their terms forbid it), and their APIs
+are paid agreements; one can be added as a second `EnrichmentProvider` once
+such an agreement exists.
 
-- A **verified** email and company details are applied immediately. Apollo's
-  "guessed" emails and locked placeholders are never stored.
-- **Phone numbers** arrive minutes later at `/api/webhooks/apollo/<token>`
-  (Apollo requires a webhook for phones). The token is random per lookup and
-  can only fill that lead's empty phone fields. Vercel Authentication blocks
-  Apollo unless **Protection Bypass for Automation** is enabled (the app adds
-  the bypass secret to the webhook URL automatically) or a custom domain is
-  used.
-- Only empty fields are filled; nothing you typed is overwritten. Each lookup
-  is logged in `enrichment_requests`, including the raw webhook payload.
+**Access:** request *system-til-system adgang* from Erhvervsstyrelsen at
+cvrselvbetjening@erst.dk. You receive a username and password; set them as
+`CVR_USERNAME` and `CVR_PASSWORD` on Vercel and redeploy. The app queries
+`http://distribution.virk.dk/cvr-permanent/virksomhed/_search`
+(override with `CVR_ENDPOINT`).
 
-Leads are personal data: you need a lawful basis (GDPR) for enriching them,
+**Find in CVR** (`/cvr`) searches active companies by:
+
+- branche — DB07 codes or prefixes (`62` = all IT consultancy and software)
+- municipality and/or postal codes and ranges (`8000, 2000-2999`)
+- number of employees (CVR's own intervals)
+- company form (ApS, A/S, enkeltmandsvirksomhed, I/S, K/S, P/S)
+- company age in years, from the founding date
+
+Each **current director** becomes a lead — board members and former directors
+do not. A company with no registered director (typical for an
+enkeltmandsvirksomhed) yields no lead and is reported as such. The lead gets
+the company's CVR number, address, branche, size, website, and the company's
+own phone and email in `company_phone` / `company_email`. CVR has no personal
+contact details, so `email`, `phone` and `mobile_phone` stay empty. Contact
+details CVR marks secret are never used.
+
+**Fetch from CVR** on a lead fills its empty company fields, matching by CVR
+number or, failing that, by exact company name. When the name is ambiguous the
+candidates are shown and you choose; nothing is guessed. Values you already
+have are never overwritten. Each lookup is logged in `enrichment_requests`.
+
+**Reklamebeskyttelse** is always respected: protected companies are excluded
+from every search, re-checked on import, and refused by "Fetch from CVR".
+
+The query and the field paths live in `lib/integrations/cvr/query.ts` and
+`parse.ts`. They follow the published structure of the register's index but
+had not been run against the live service when this was written (it needs the
+credentials); if a criterion returns nothing, the field path there is the
+first thing to check.
+
+Apollo.io support (`lib/integrations/enrichment/apollo.ts`, the
+`/api/leads/[id]/enrich` route and its webhook) remains in the code but is
+**parked**: nothing in the UI calls it.
+
+Leads are personal data: you need a lawful basis (GDPR) for processing them,
 and Danish law (markedsføringsloven §10) restricts unsolicited email marketing.
 
 `email`, `phone` and `mobile_phone` are `null` unless LinkedIn actually
@@ -734,9 +768,6 @@ an address from a name and a domain, and it does not generate phone numbers. A
 phone number is read only from an explicit `tel:` link, and email addresses are
 filtered against a list of asset and vendor domains that produce email-shaped
 false positives.
-
-Apollo (above) is how those gaps are filled. Another vendor can be added by
-implementing `EnrichmentProvider` (`lib/integrations/enrichment/index.ts`).
 
 ---
 
